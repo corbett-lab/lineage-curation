@@ -12,7 +12,9 @@ To create meaningful annotations on tops of existing conventions, and to tailor 
 The autolin algorithm is not intended to overwrite any existing lineages and will seek to create meaningful, unbiased suggestions to replace manual inspection and designation of lineage splits.
 
 ### Using arguments to improve lineage designations
-the `--recursive` (`-r`) flag, when called, will indicate a recursive employment of the autolin algorithm, and will designate sublineages of the lineages suggested by autolin, allowing for several layers of designation. To prevent the splitting of sublineages into N=1 size, the `-m` or `--minsamples` command requires that each lineage carry at least m sample weight (without special weighting, m is equivalent to minimum number of samples assigned to a lineage)(default m is 10). `-m` is usable with or without `-r` but is especially important when recursive rounds of lineage designation are employed. 
+the `--recursive` (`-r`) flag, when called, will indicate a recursive employment of the autolin algorithm, and will designate sublineages of the lineages suggested by autolin, allowing for several layers of designation. To prevent the splitting of sublineages into N=1 size, the `-m` or `--minsamples` command requires that each lineage carry at least m sample weight (without special weighting, m is equivalent to minimum number of samples assigned to a lineage)(default m is 10). `-m` is usable with or without `-r` but is especially important when recursive rounds of lineage designation are employed.
+
+the `--mutweights` or `-w` flag acknowledges that certain mutations may not contribute as meaningful of changes to an organism and that certain mutations should be weighted more strongly in their consideration of differences between samples in the same taxa. **to add: helper script for identifying n/ns mutations and prescribing weights to them. also: potentially for certain pathogens weighting certain regions higher. also: potentially hypermutation mutations. **
 
 
 
