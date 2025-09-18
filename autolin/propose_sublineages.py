@@ -7,7 +7,8 @@ from pango_aliasor.aliasor import Aliasor
 global_aliasor = Aliasor()
 
 def process_mstr(mstr):
-    """Read a mutation string and return the chromosome, location, reference, and alternate alleles.
+    """
+    Read a mutation string and return the chromosome, location, reference, and alternate alleles.
     """
     if ":" in mstr:
         chro = mstr.split(":")[0]
