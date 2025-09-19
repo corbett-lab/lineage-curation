@@ -43,11 +43,11 @@ COPY env.yml /app/env.yml
 
 RUN conda init
 
-# Create the environment (autolin)
+# Create the environment (taxalin)
 RUN conda env create -f env.yml && \
     conda clean -afy
 
-RUN mamba run -n autolin mamba install -c conda-forge boost=1.85 -y
+RUN mamba run -n taxalin mamba install -c conda-forge boost=1.85 -y
 
 COPY . /app
 
@@ -55,9 +55,9 @@ COPY . /app
 RUN conda init bash
 
 # Append env activation to bash startup
-RUN echo "conda activate autolin" >> /root/.bashrc
+RUN echo "conda activate taxalin" >> /root/.bashrc
 
 # Activate the environment for all future shell commands
-SHELL ["conda", "run", "-n", "autolin", "/bin/bash", "-c"]
+SHELL ["conda", "run", "-n", "taxalin", "/bin/bash", "-c"]
 
 CMD ["bash"]
