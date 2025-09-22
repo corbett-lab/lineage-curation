@@ -1,7 +1,16 @@
 Import propose_sublineages.py from https://github.com/jmcbroome/autolin (commit 32d9a52)
 
 ### Example Demonstration
-As a beginner example, as well as proof of concept, we have extracted the XFG clade from the SARS-CoV-2 global phylogeny using the command `matUtils extract -i public-latest.all.masked.pb.gz -c XFG -o XFG.pb`. 
+As a beginner example, as well as proof of concept, we have extracted the XFG clade from the SARS-CoV-2 global phylogeny using the command `matUtils extract -i public-latest.all.masked.pb.gz -c XFG -o XFG.pb` and lineage4.8 from the MTB global phylogeny using `matUtils extract -i {mtb tree} -c lineage4.8 -o {4.8 output}`. 
+
+Note to self and user: The SARS-CoV-2 global phylogeny is annotated on the nodes using matUtils annotate. The original tree has both nextstrain and pango annotations resulting in 2 labels on certain internal nodes. Autolin is performing strangley on the dual-annotated tree. To combat this issue, I have reannotated the tree wih only a single annotation. The commands I used are as follows:
+`matUtils extract -i public-latest.all.masked.pb.gz -c XFG -o XFG.pb`
+`matUtils summary -i XFG.pb -C XFG.clades`
+`cut -f1,3 XFG.clades > XFGclades.pangoonly.tsv`
+`awk '{print $2 "\t" $1}' XFGclades.pangoonly.tsv > XFGclades.pangoonly.fixed.tsv`
+`matUtils annotate -i XFG.pb -l -c XFGclades.pangoonly.fixed.tsv -o XFG.pangoonly.pb`
+`py convert_autolinpb_totax.py -a XFG.pangoonly.pb `
+
 
 ### Getting started
 To generate autolin designations, the software takes as input a Mutation Annotated Tree (MAT) in protcol buffer format. Instruction on creating a MAT can be found at https://usher-wiki.readthedocs.io/en/latest/UShER.html#methodology. 
