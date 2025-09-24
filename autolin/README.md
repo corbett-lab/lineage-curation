@@ -84,8 +84,9 @@ usher_to_taxonium has sparse documentation and many hardcoded quirks. ** keep fi
 
 
 To do list:
-- [X] create scripts to convert autolin pbs into taxonium jsonl gzs
-- [] create a script to handle metadata column naming between matUtils summary and usher_to_taxonium
+[X] create scripts to convert autolin pbs into taxonium jsonl gzs
+[X] determine where in jsonl autolin data will be kept (for taxonium updates)
+[ ] create a script to handle metadata column naming between matUtils summary and usher_to_taxonium
 - [] make more phenotype scripts for weigting antibiotic resistance data. i.e. numerical mic data
 - [] make phenotype script accept an ordinal list of categories from the user 
 - [] make a mutation script that identifies likely mutations of interest for SARS-CoV-2 (or expand on use of GFF for propose_sublineages)
