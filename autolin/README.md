@@ -60,7 +60,7 @@ As an example of how to use phenotypic weighting for consideration in autolin, w
 
 This script employs an ordinal weighting scheme based on drug resistance characterized by the WHO (https://wwwnc.cdc.gov/eid/article/28/9/22-0458_article).  
 
-To use this script, an annotated MTB MAT and its corresponding metadata file is required. For this demonstration we use `mtb.4.8.pb` and `mtb.20250912.metadata.tsv.gz` which can be downloaded from https://hgdownload.gi.ucsc.edu/hubs/GCF/000/195/955/GCF_000195955.2/UShER_Mtb_SRA/. *NOTE this script assumes that it is being run from the `autolin` directory and will write outputs to this dir. ** Future versions will be more adaptable. * *Note this script hardcodes output names, if data currently exists in these files it will be overwritten by the newest run of the code* *future versions will avoid overwriting existing data*
+To use this script, an annotated MTB MAT and its corresponding metadata file is required. For this demonstration we use `mtb.4.8.pb` and `mtb.20250912.metadata.tsv.gz` which can be downloaded from https://hgdownload.gi.ucsc.edu/hubs/GCF/000/195/955/GCF_000195955.2/UShER_Mtb_SRA/. **NOTE this script assumes that it is being run from the `autolin` directory and will write outputs to this dir.** *Future versions will be more adaptable.* **Note this script hardcodes output names, if data currently exists in these files it will be overwritten by the newest run of the code** *future versions will avoid overwriting existing data*
 
 **Future steps: use RAND index to characterize lineages proposed from phenotype weighting 
 **Future steps: create a system for MIC resistance values (not categorical data)
