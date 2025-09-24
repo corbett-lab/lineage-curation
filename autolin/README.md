@@ -84,19 +84,19 @@ usher_to_taxonium has sparse documentation and many hardcoded quirks. ** keep fi
 
 
 To do list:
-[X] create scripts to convert autolin pbs into taxonium jsonl gzs
-[X] determine where in jsonl autolin data will be kept (for taxonium updates)
-[ ] create a script to handle metadata column naming between matUtils summary and usher_to_taxonium
-- [] make more phenotype scripts for weigting antibiotic resistance data. i.e. numerical mic data
-- [] make phenotype script accept an ordinal list of categories from the user 
-- [] make a mutation script that identifies likely mutations of interest for SARS-CoV-2 (or expand on use of GFF for propose_sublineages)
-- [] generalize mutation script for other pathogens 
-- [] make sure all of these work in docker container 
-- [] turn all of these processes into pipelines that take user commands and output a fully characterized jsonl.gz 
-- [] get taxonium to accept a different column name than annotation 1
-- [] make data writing and directory handling consistent between scripts 
-- [] make an effort to use tmp files rather than hardcoding file names 
-- [] profile autolin to determine if parallelizing is worth doing 
+- [X] create scripts to convert autolin pbs into taxonium jsonl gzs
+- [X] determine where in jsonl autolin data will be kept (for taxonium updates)
+- [ ] create a script to handle metadata column naming between matUtils summary and usher_to_taxonium
+- [ ] make more phenotype scripts for weigting antibiotic resistance data. i.e. numerical mic data
+- [ ] make phenotype script accept an ordinal list of categories from the user 
+- [ ] make a mutation script that identifies likely mutations of interest for SARS-CoV-2 (or expand on use of GFF for propose_sublineages)
+- [ ] generalize mutation script for other pathogens 
+- [ ] make sure all of these work in docker container 
+- [ ] turn all of these processes into pipelines that take user commands and output a fully characterized jsonl.gz 
+- [ ] get taxonium to accept a different column name than annotation 1
+- [ ] make data writing and directory handling consistent between scripts 
+- [ ] make an effort to use tmp files rather than hardcoding file names 
+- [ ] profile autolin to determine if parallelizing is worth doing 
 
 
 
