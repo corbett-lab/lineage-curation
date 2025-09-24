@@ -28,21 +28,25 @@ The autolin algorithm is not intended to overwrite any existing lineages and wil
 
 ### Using arguments to improve lineage designations
 
-As noted above, for global phylogenies, a general approach of identifying all potential new annotations for an entire tree will be computationally expensive for well-annotated global phylogenies. Most notably, SARS-CoV-2 has 4864 existing clade labels and querying all of these for new lineage designations is time-consuming and not necessarily valuable as certain lineages are older and less relevant currently. *add helper script for querying metadata for newer lineages or samples* <br /> `--annotation` or `-a` allow for users to select clade names that they specifically are interested in proposing sublineages for. (Note that `-a` will only work if the MAT is annotated and the user makes a direct reference to an existing annotation)
+As noted above, for global phylogenies, a general approach of identifying all potential new annotations for an entire tree will be computationally expensive for well-annotated global phylogenies. Most notably, SARS-CoV-2 has 4864 existing clade labels and querying all of these for new lineage designations is time-consuming and not necessarily valuable as certain lineages are older and less relevant currently. 
 
-For example:
-If user wants to annotate lineage XBB in the SARS-CoV-2 global phlyogeny, the MAT can be retrieved with `wget http://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/UShER_SARS-CoV-2/public-latest.all.masked.pb.gz` and the command `python3 propose_sublineages.py -i public-latest.all.masked.pb.gz -a XBB`
+*add helper script for querying metadata for newer lineages or samples* 
 
-** work on this ? maybe make a helper fucntion to determine how long a particular predicton will make?**
-Tip: using `matUtils summary -i {name of tree } -c clades.tsv` the user can receive a list of clades and the number of sublineages within that clade whhich affect how long samples with membership in that clade 
+`--annotation` or `-a` allow for users to select clade names that they specifically are interested in proposing sublineages for. (Note that `-a` will only work if the MAT is annotated and the user makes a direct call to an existing annotation)
 
-the `--recursive` (`-r`) flag, when called, will indicate a recursive employment of the autolin algorithm, and will designate sublineages of the lineages suggested by autolin, allowing for several layers of designation. To prevent the splitting of sublineages into N=1 size, the `-m` or `--minsamples` command requires that each lineage carry at least m sample weight (without special weighting, m is equivalent to minimum number of samples assigned to a lineage)(default m is 10). `-m` is usable with or without `-r` but is especially important when recursive rounds of lineage designation are employed.
+For example: If user wants to annotate lineage XFG in the SARS-CoV-2 global phlyogeny, the MAT can be retrieved with `wget http://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/UShER_SARS-CoV-2/public-latest.all.masked.pb.gz` and the command `python3 propose_sublineages.py -i public-latest.all.masked.pb.gz -a XFG`
 
-the `--mutweights` or `-w` flag acknowledges that certain mutations may not contribute as meaningful of changes to an organism and that certain mutations should be weighted more strongly in their consideration of differences between samples in the same taxa. **to add: helper script for identifying n/ns mutations and prescribing weights to them. also: potentially for certain pathogens weighting certain regions higher. also: potentially hypermutation mutations. **
+*maybe make a helper fucntion to determine how long a particular predicton will make?*
 
-the `--samples` or `-p` flag is intended to be used for weighting samples associated with certain phenotypes. For example, in MTB, samples with predicted or observed antibiotic resistance can be weighted more heavily in the designation of new lineages.
+Tip: using `matUtils summary -i {name of tree } -c clades.tsv` the user can receive a list of clades and the number of sublineages within that clade which can be used to choose more specific clades, and avoid choosing very large clades. 
 
-### Example lineage designation.
+the `--recursive` (`-r`) flag, when called, will initiate a recursive employment of the autolin algorithm, and will designate sublineages of the lineages suggested by autolin, allowing for several layers of designation. To prevent the splitting of sublineages into N=1 size, the `-m` or `--minsamples` command requires that each lineage carry at least m sample weight (without special weighting, m is equivalent to minimum number of samples assigned to a lineage)(default m is 10). `-m` is usable with or without `-r` but is especially important when recursive rounds of lineage designation are employed. SEE EXAMPLE BELOW
+
+the `--mutweights` or `-w` flag acknowledges that certain mutations may not contribute as meaningful of changes to an organism and that certain mutations should be weighted more strongly in their consideration of differences between samples in the same taxa. *to add: helper script for identifying n/ns mutations and prescribing weights to them. also: potentially for certain pathogens weighting certain regions higher. also: potentially hypermutation mutations.*
+
+the `--samples` or `-p` flag is intended to be used for weighting samples associated with certain phenotypes. For example, in MTB, samples with predicted or observed antibiotic resistance can be weighted more heavily in the designation of new lineages. SEE EXAMPLE BELOW
+
+### Lineage designation examples
 As an example, we have extracted a subtree of lineage4.8 from the MTB global phylogeny. The original file is available in the repository as `mtb.4.8.pb` and it's visual without autolin designations is available as `mtb.4.8.jsonl.gz`. 
 We have also extracted a subtree of XFG from the SARS-CoV-2 global phylogeny. This example is available in the repo as `XFG.pangoonly.pb` and it's visual without autolin designations is available as `XFG.pangoonly.jsonl.gz`.
 
@@ -50,7 +54,10 @@ We have also extracted a subtree of XFG from the SARS-CoV-2 global phylogeny. Th
 The most basic command to designate new lineages within `mtb.4.8.pb` is `python3 propose_sublineages.py -i mtb.4.8.pb -o mtb.4.8.autolin.pb`. The results of this can be observed in `mtb.4.8.autolin.jsonl.gz`. To generate recursive sublineages the command is `python3 propose_sublineages.py -i mtb.4.8.pb -r -o mtb.4.8.autolin.r.pb` which relies on a default `-m` setting of 10 and results in lineages as shown in `mtb.4.8.autolin.r.jsonl.gz`. The resulting clades and their sizes can be viewed with `matUtils summary -i mtb.4.8.autolin.r.pb -c mtb.4.8.autolin.r.cladecounts.tsv` and `-m` can be toggled according to user needs. Lower `-m` values will increase the number of proposed sublineages and decrease the number of samples in a proposed sublineage. 
 
 #### Identifying phenotypes for weighting in MTB
-As an example of how to use phenotypic weighting for consideration in autolin, we have created a helper script that accepts as input an annotated MTB phylogeny and a metadata table containing predicted antibiotic resistance information from TB-profiler. **NOTE: Future scripts will be more generalized than this. This is just one example.
+As an example of how to use phenotypic weighting for consideration in autolin, we have created a helper script that accepts as input an annotated MTB phylogeny and a metadata table containing predicted antibiotic resistance information from TB-profiler. 
+
+**NOTE: Future scripts will be more generalized than this. This is just one example.**
+
 This script employs an ordinal weighting scheme based on drug resistance characterized by the WHO (https://wwwnc.cdc.gov/eid/article/28/9/22-0458_article).  
 
 To use this script, an annotated MTB MAT and its corresponding metadata file is required. For this demonstration we use `mtb.4.8.pb` and `mtb.20250912.metadata.tsv.gz` which can be downloaded from https://hgdownload.gi.ucsc.edu/hubs/GCF/000/195/955/GCF_000195955.2/UShER_Mtb_SRA/. *NOTE this script assumes that it is being run from the `autolin` directory and will write outputs to this dir. ** Future versions will be more adaptable. * *Note this script hardcodes output names, if data currently exists in these files it will be overwritten by the newest run of the code* *future versions will avoid overwriting existing data*
