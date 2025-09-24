@@ -3,7 +3,7 @@ Import propose_sublineages.py from https://github.com/jmcbroome/autolin (commit 
 ### Example Demonstration
 As a beginner example, as well as proof of concept, we have extracted the XFG clade from the SARS-CoV-2 global phylogeny using the command `matUtils extract -i public-latest.all.masked.pb.gz -c XFG -o XFG.pb` and lineage4.8 from the MTB global phylogeny using `matUtils extract -i {mtb tree} -c lineage4.8 -o {4.8 output}`. 
 
-Note to self and user: The SARS-CoV-2 global phylogeny is annotated on the nodes using matUtils annotate. The original tree has both nextstrain and pango annotations resulting in 2 labels on certain internal nodes. Autolin is performing strangley on the dual-annotated tree. To combat this issue, I have reannotated the tree wih only a single annotation. The commands I used are as follows:
+Note to self and user: The SARS-CoV-2 global phylogeny is annotated on the nodes using matUtils annotate. The original tree has both nextstrain and pango annotations resulting in 2 labels on certain internal nodes. Autolin is performing strangely on the dual-annotated tree. To combat this issue, I have reannotated the tree wih only a single annotation. The commands I used are as follows:
 `matUtils extract -i public-latest.all.masked.pb.gz -c XFG -o XFG.pb`
 `matUtils summary -i XFG.pb -C XFG.clades`
 `cut -f1,3 XFG.clades > XFGclades.pangoonly.tsv`
@@ -11,13 +11,14 @@ Note to self and user: The SARS-CoV-2 global phylogeny is annotated on the nodes
 `matUtils annotate -i XFG.pb -l -c XFGclades.pangoonly.fixed.tsv -o XFG.pangoonly.pb`
 `py convert_autolinpb_totax.py -a XFG.pangoonly.pb `
 
+For the moment, if a SARS-CoV-2 file with dual annotations is used for any of these scripts it will fail with an error message. Use XFG.pangoonly.pb or use my above commands to get a SARS-CoV-2 tree with only pango annotations. 
 
 ### Getting started
 To generate autolin designations, the software takes as input a Mutation Annotated Tree (MAT) in protcol buffer format. Instruction on creating a MAT can be found at https://usher-wiki.readthedocs.io/en/latest/UShER.html#methodology. 
 
 In it's most basic iteration, autolin can be run with the command `python3 propose_sublineages.py -i {name of MAT}` however, several considerations must be taken into account for quality automated lineage designations. 
 
-First, many pathogens have existing lineage/strain naming conventions that are already standing, and working with these existing conventions is likely the most appropriate way to move forward with further lineage names. For this reason, inputting a MAT with annotated nodes is more useful for certain pathogens. Instructions on annotating a MAT can also be found within the UShER documentation. Annotated MATs for certain pathogens such as M. tuberculosis and SARS-CoV-2 are available at https://hgdownload.gi.ucsc.edu/hubs/GCF/000/195/955/GCF_000195955.2/UShER_Mtb_SRA/ and https://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/UShER_SARS-CoV-2/. ** NOTE!!! although matUtils annotate and autolin are capable of handling MATs with more than 1 annotation per node, we strongly advise against using MATs with more than 1 annotation pernode. Much of our additional tools assume 1 annotation and will raise an error with more than 1. 
+First, many pathogens have existing lineage/strain naming conventions that are already standing, and working with these existing conventions is likely the most appropriate way to move forward with further lineage names. For this reason, inputting a MAT with annotated nodes is more useful for certain pathogens. Instructions on annotating a MAT can also be found within the UShER documentation. Annotated MATs for certain pathogens such as M. tuberculosis and SARS-CoV-2 are available at https://hgdownload.gi.ucsc.edu/hubs/GCF/000/195/955/GCF_000195955.2/UShER_Mtb_SRA/ and https://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/UShER_SARS-CoV-2/. ** NOTE!!! although matUtils annotate and autolin are capable of handling MATs with more than 1 annotation per node, we strongly advise against using MATs with more than 1 annotation per node. Much of our additional tools assume 1 annotation and will raise an error with more than 1. 
 
 Please note that running `python3 propose_sublineages.py -i {name of MAT}` on the annotated global phylogenies of M. tuberculosis and ESPECIALLY SARS-CoV-2 may result in significant run times as there are many existing lineages and sublineages that would all be examined for their potential sublineage designations. For this reason, large, well-annotated pathogens will likely require intentional targeting of clades of interest (see below for details). 
 
@@ -27,7 +28,7 @@ The autolin algorithm is not intended to overwrite any existing lineages and wil
 
 ### Using arguments to improve lineage designations
 
-As noted above, for global phylogenies, a general approach of identifying all potential new annotations for an entire tree will be computationally expensive for well-annotated global phylogenies. Most notably, SARS-CoV-2 has 4864 existing clade labels and querying all of these for new lineage designations is time-consuming and not necessarily valuable as certain lineages are older and less relevant currently. ** add helper script for querying metadata for newer lineages or samples ** `--annotation` or `-a` allow for users to select clade names that they specifically are interested in proposing sublineages for. (Note that `-a` will only work if the MAT is annotated and the user makes a direct reference to an existing annotation)
+As noted above, for global phylogenies, a general approach of identifying all potential new annotations for an entire tree will be computationally expensive for well-annotated global phylogenies. Most notably, SARS-CoV-2 has 4864 existing clade labels and querying all of these for new lineage designations is time-consuming and not necessarily valuable as certain lineages are older and less relevant currently. *add helper script for querying metadata for newer lineages or samples* \ `--annotation` or `-a` allow for users to select clade names that they specifically are interested in proposing sublineages for. (Note that `-a` will only work if the MAT is annotated and the user makes a direct reference to an existing annotation)
 
 For example:
 If user wants to annotate lineage XBB in the SARS-CoV-2 global phlyogeny, the MAT can be retrieved with `wget http://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/UShER_SARS-CoV-2/public-latest.all.masked.pb.gz` and the command `python3 propose_sublineages.py -i public-latest.all.masked.pb.gz -a XBB`
@@ -87,6 +88,7 @@ To do list:
 - [] get taxonium to accept a different column name than annotation 1
 - [] make data writing and directory handling consistent between scripts 
 - [] make an effort to use tmp files rather than hardcoding file names 
+- [] profile autolin to determine if parallelizing is worth doing 
 
 
 
