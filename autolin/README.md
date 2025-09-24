@@ -17,7 +17,7 @@ To generate autolin designations, the software takes as input a Mutation Annotat
 
 In it's most basic iteration, autolin can be run with the command `python3 propose_sublineages.py -i {name of MAT}` however, several considerations must be taken into account for quality automated lineage designations. 
 
-First, many pathogens have existing lineage/strain naming conventions that are already standing, and working with these existing conventions is likely the most appropriate way to move forward with further lineage names. For this reason, inputting a MAT with annotated nodes is more useful for certain pathogens. Instructions on annotating a MAT can also be found within the UShER documentation. Annotated MATs for certain pathogens such as M. tuberculosis and SARS-CoV-2 are available at https://hgdownload.gi.ucsc.edu/hubs/GCF/000/195/955/GCF_000195955.2/UShER_Mtb_SRA/ and https://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/UShER_SARS-CoV-2/.
+First, many pathogens have existing lineage/strain naming conventions that are already standing, and working with these existing conventions is likely the most appropriate way to move forward with further lineage names. For this reason, inputting a MAT with annotated nodes is more useful for certain pathogens. Instructions on annotating a MAT can also be found within the UShER documentation. Annotated MATs for certain pathogens such as M. tuberculosis and SARS-CoV-2 are available at https://hgdownload.gi.ucsc.edu/hubs/GCF/000/195/955/GCF_000195955.2/UShER_Mtb_SRA/ and https://hgdownload.soe.ucsc.edu/goldenPath/wuhCor1/UShER_SARS-CoV-2/. ** NOTE!!! although matUtils annotate and autolin are capable of handling MATs with more than 1 annotation per node, we strongly advise against using MATs with more than 1 annotation pernode. Much of our additional tools assume 1 annotation and will raise an error with more than 1. 
 
 Please note that running `python3 propose_sublineages.py -i {name of MAT}` on the annotated global phylogenies of M. tuberculosis and ESPECIALLY SARS-CoV-2 may result in significant run times as there are many existing lineages and sublineages that would all be examined for their potential sublineage designations. For this reason, large, well-annotated pathogens will likely require intentional targeting of clades of interest (see below for details). 
 
@@ -39,11 +39,26 @@ the `--recursive` (`-r`) flag, when called, will indicate a recursive employment
 
 the `--mutweights` or `-w` flag acknowledges that certain mutations may not contribute as meaningful of changes to an organism and that certain mutations should be weighted more strongly in their consideration of differences between samples in the same taxa. **to add: helper script for identifying n/ns mutations and prescribing weights to them. also: potentially for certain pathogens weighting certain regions higher. also: potentially hypermutation mutations. **
 
+the `--samples` or `-p` flag is intended to be used for weighting samples associated with certain phenotypes. For example, in MTB, samples with predicted or observed antibiotic resistance can be weighted more heavily in the designation of new lineages.
+
 ### Example lineage designation.
 As an example, we have extracted a subtree of lineage4.8 from the MTB global phylogeny. The original file is available in the repository as `mtb.4.8.pb` and it's visual without autolin designations is available as `mtb.4.8.jsonl.gz`. 
+We have also extracted a subtree of XFG from the SARS-CoV-2 global phylogeny. This example is available in the repo as `XFG.pangoonly.pb` and it's visual without autolin designations is available as `XFG.pangoonly.jsonl.gz`.
+
 #### mtb.4.8 autolin settings 
 The most basic command to designate new lineages within `mtb.4.8.pb` is `python3 propose_sublineages.py -i mtb.4.8.pb -o mtb.4.8.autolin.pb`. The results of this can be observed in `mtb.4.8.autolin.jsonl.gz`. To generate recursive sublineages the command is `python3 propose_sublineages.py -i mtb.4.8.pb -r -o mtb.4.8.autolin.r.pb` which relies on a default `-m` setting of 10 and results in lineages as shown in `mtb.4.8.autolin.r.jsonl.gz`. The resulting clades and their sizes can be viewed with `matUtils summary -i mtb.4.8.autolin.r.pb -c mtb.4.8.autolin.r.cladecounts.tsv` and `-m` can be toggled according to user needs. Lower `-m` values will increase the number of proposed sublineages and decrease the number of samples in a proposed sublineage. 
 
+#### Identifying phenotypes for weighting in MTB
+As an example of how to use phenotypic weighting for consideration in autolin, we have created a helper script that accepts as input an annotated MTB phylogeny and a metadata table containing predicted antibiotic resistance information from TB-profiler. **NOTE: Future scripts will be more generalized than this. This is just one example.
+This script employs an ordinal weighting scheme based on drug resistance characterized by the WHO (https://wwwnc.cdc.gov/eid/article/28/9/22-0458_article).  
+
+To use this script, an annotated MTB MAT and its corresponding metadata file is required. For this demonstration we use `mtb.4.8.pb` and `mtb.20250912.metadata.tsv.gz` which can be downloaded from https://hgdownload.gi.ucsc.edu/hubs/GCF/000/195/955/GCF_000195955.2/UShER_Mtb_SRA/. *NOTE this script assumes that it is being run from the `autolin` directory and will write outputs to this dir. ** Future versions will be more adaptable. * *Note this script hardcodes output names, if data currently exists in these files it will be overwritten by the newest run of the code* *future versions will avoid overwriting existing data*
+
+**Future steps: use RAND index to characterize lineages proposed from phenotype weighting 
+**Future steps: create a system for MIC resistance values (not categorical data)
+
+
+#### Identifying mutations for weighting in SARS-CoV-2
 
 
 ####
@@ -52,10 +67,26 @@ The most basic command to designate new lineages within `mtb.4.8.pb` is `python3
 To create a file for visualization in Taxonium users should use the `-o` or `--output` flag in propose_sublineages.py. Supply an output MAT name `{your tree}autolin.pb`. This output file will have both existing and proposed autolin annotations on the internal nodes. To convert this file into a `jsonl.gz` type for taxonium, use usher_to_taxonium which is available in TaxoniumTools https://github.com/theosanderson/taxonium/tree/master/taxoniumtools. 
 
 To assist in the conversion between the autolin outputted pb and the taxonium input jsonl.gz, `convert_autolinpb_totax.py` will take the name of the autolin pb with `-a` and output a `.jsonl.gz` which can be used for viewing newly proposed lineages.
-** note `convert_autolinpb_totax.py` is currently optimized for the example tree `XXXX`. this script will be refined and likely turned into a snakemake pipeline in future releases.
+
+** note `convert_autolinpb_totax.py` is currently assumes that the pb has only one annotation scheme. Using the SARS-C0oV-2 in its existing global form will cause errors. 
+** Note: these scripts will be refined and likely turned into a snakemake pipeline in future releases.
 
 Notes on usher_to_taxonium:
 usher_to_taxonium has sparse documentation and many hardcoded quirks. ** keep filling this in 
+
+
+To do list:
+- [X] create scripts to convert autolin pbs into taxonium jsonl gzs
+- [] create a script to handle metadata column naming between matUtils summary and usher_to_taxonium
+- [] make more phenotype scripts for weigting antibiotic resistance data. i.e. numerical mic data
+- [] make phenotype script accept an ordinal list of categories from the user 
+- [] make a mutation script that identifies likely mutations of interest for SARS-CoV-2 (or expand on use of GFF for propose_sublineages)
+- [] generalize mutation script for other pathogens 
+- [] make sure all of these work in docker container 
+- [] turn all of these processes into pipelines that take user commands and output a fully characterized jsonl.gz 
+- [] get taxonium to accept a different column name than annotation 1
+- [] make data writing and directory handling consistent between scripts 
+- [] make an effort to use tmp files rather than hardcoding file names 
 
 
 
