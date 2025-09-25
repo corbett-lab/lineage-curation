@@ -78,7 +78,6 @@ Once the output of `autolin -p` is available (in this case`mtb.4.8.pheno.pb`) th
 #### Identifying mutations for weighting in SARS-CoV-2
 *to do asap*
 
-
 ####
 
 ### Getting lineage designations into Taxonium
@@ -86,11 +85,19 @@ To create a file for visualization in Taxonium users should use the `-o` or `--o
 
 To assist in the conversion between the autolin outputted pb and the taxonium input jsonl.gz, `convert_autolinpb_totax.py` will take the name of the autolin pb with `-a` and output a `.jsonl.gz` which can be used for viewing newly proposed lineages.
 
-** note `convert_autolinpb_totax.py` is currently assumes that the pb has only one annotation scheme. Using the SARS-C0oV-2 in its existing global form will cause errors. 
-** Note: these scripts will be refined and likely turned into a snakemake pipeline in future releases.
+**note `convert_autolinpb_totax.py` currently assumes that the pb has only one annotation scheme. Using the SARS-CoV-2 in its existing global form will cause errors.**
+*Note: these scripts will be refined and likely turned into a snakemake pipeline in future releases.*
+
+To run `convert_autolinpb_totax.py` all that is needed is an autolin annotated pb. The basic command is `py convert_autolinpb_totax.py -a {autolin.pb}`. This script will additionally accept a metadata file for the MAT that was annotated by autolin. 
+
+To add metadata to the taxonium file use the flag `-amd` or `--additional-metadata`. For example, to include the phenotypic drug resistance classifications for mtb.4.8.pheno.pb the command `py convert_autolinpb_totax.py -a mtb.4.8.pheno.ord.pb -amd pheno.pheno.tsv` will generate `mtb.4.8.pheno.jsonl.gz` which will contain metadata for existing and autolin designations and drug resistance. If the full set of metadata associated with the data set is desired `-amd` will take a gzipped tsv as well such as in `py convert_autolinpb_totax.py -a mtb.4.8.pheno.pb -amd mtb.20240912.metadata.tsv.gz` which will also output a file named `mtb.4.8.pheno.pb`. 
+
+**Note that .jsonl.gz output files have the same suffix as the input pb. Existing files will be overwritten if they carry the same name**
+
+*Future versions of this will create options for tmp files and other ways to avoid potential overwriting*
 
 Notes on usher_to_taxonium:
-usher_to_taxonium has sparse documentation and many hardcoded quirks. ** keep filling this in 
+usher_to_taxonium has sparse documentation and many hardcoded quirks. Users can use usher_to_taxonium directly but will very likely experience formatting issues. We recommend using convert_autolinpb_totax.py.
 
 
 To do list:
