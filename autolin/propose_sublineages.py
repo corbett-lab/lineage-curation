@@ -26,6 +26,7 @@ def process_mstr(mstr):
         alt = data[-1]
     return chro, loc, ref, alt
 
+#LILY TO DEAL WITH: POTENETIAL BUG HERE
 def compute_mutation_weight(node,mutweights):
     if len(mutweights) == 0:
         #if the mutweights parameter is not used, use the branch length attribute
@@ -289,6 +290,7 @@ def propose(args):
     except:
         cannotes = t.get_annotations() #replacement function in newer versions of bte
     #decompress all lineage names.
+    #print('cans', cannotes)
     annotes = {}
     for k,v in cannotes.items():
         annotes[global_aliasor.uncompress(k)] = v
@@ -406,7 +408,10 @@ def propose(args):
             except:
                 # print(f"Could not compress lineage {k}")
                 pass
+
+            #LOOK AT THIS : SEE IF IT MAKE SENSE FOR 2 ANNOTATIONS
             if v not in annd:
+
                 annd[v] = []
             if len(annd[v]) == 2:
                 annd[v][1] = k
