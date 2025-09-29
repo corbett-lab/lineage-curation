@@ -158,8 +158,8 @@ def main():
                 with open('phenometa.tsv', 'r') as f:
                     header = f.readline().strip().split('\t')
                     assert len(header) == 2, f"Error: {clade_file} does not have exactly 2 columns."
-
-                    columns = f.readline().strip().split('\t')
+                    columns = header
+                    #columns = f.readline().strip().split('\t')
     usher_to_taxonium(autolin_pb_path, clade_file, sc2, columns)
 
 if __name__ == "__main__":
