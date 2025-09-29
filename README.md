@@ -23,3 +23,14 @@ cd autolin
 python propose_sublineages.py -i ../data/subtree.pb -d lineages.txt
 ```
 This will output proposed lineage to `lineages.txt`.
+
+## View and Modify Autolin Results
+
+Launch the Lineage Manager:
+
+```bash
+# Start the web interface
+docker run -p 3000:3000 -p 8000:8000 -it taxalin start-lineage-manager
+```
+
+Then open http://localhost:3000 in a web browser.
