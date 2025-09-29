@@ -13,6 +13,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+
+# Install NVM and Node.js v20
+ENV NVM_DIR=/root/.nvm
+RUN curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
+    . "$NVM_DIR/nvm.sh" && \
+    nvm install 20 && \
+    nvm alias default 20 && \
+    nvm use default
+ENV PATH=$NVM_DIR/versions/node/v20.*/bin:$PATH
+
 # Install Miniconda
 ENV CONDA_DIR=/opt/conda
 ENV PATH=$CONDA_DIR/bin:$PATH
@@ -38,6 +48,11 @@ RUN conda install -n base mamba
 
 # Set working directory
 WORKDIR /app
+
+
+
+# COPY ui/taxonium/taxonium-backend /app/taxonium-backend
+# COPY ui/linolium/dist /app/linolium/dist
 
 COPY env.yml /app/env.yml
 
