@@ -1,35 +1,55 @@
 # Lineage Curation UI
 
-Interactive web interface for phylogenetic lineage curation and analysis.
+Web interface for phylogenetic lineage curation.
 
 ## Quick Start
 
-### 1. Install Dependencies
+**Prerequisites**: JSONL file (`.jsonl.gz`) - see [main README](../#quick-start) for MAT conversion.
+
 ```bash
 cd linolium
-npm run install-all
-```
-
-### 2. Build Components
-```bash
-npm run build
-```
-
-### 3. Run with Custom Data
-```bash
-# Use the provided script with your Taxonium-format JSONL file
+npm run install-all && npm run build
 ./run-prod.sh /path/to/your/data.jsonl.gz
+```
 
-# Or manually:
-# Terminal 1 - Backend
+Open http://localhost:3000
+
+## Manual Launch
+
+```bash
+cd linolium
+# Backend
 cd taxonium_backend
-node server.js --port 8001 --data_file /path/to/your/data.jsonl.gz
+node server.js --port 8001 --data_file /path/to/data.jsonl.gz
 
-# Terminal 2 - Frontend  
+# Frontend (separate terminal)
 cd ..
 npm run serve
 ```
 
-### 4. Access the Interface
-- **Frontend**: http://localhost:3000
-- **Backend API (for developers)**: http://localhost:8001
+## Development
+
+```bash
+cd linolium
+npm run dev-with-backend    # Hot reload
+npm run rebuild-component   # Rebuild after changes
+npm run clean              # Clean artifacts
+```
+
+## Structure
+
+```
+ui/
+└── linolium/                   # Main application
+    ├── taxonium_component/     # React components  
+    ├── taxonium_backend/       # API server
+    ├── taxonium_data_handling/ # Data utilities
+    └── run-prod.sh            # Launch script
+```
+
+## Features
+
+- Hierarchical lineage visualization
+- Review proposed lineages (from Autolin)
+- Real-time editing (merge, split, reassign)
+- JSONL/TSV export
