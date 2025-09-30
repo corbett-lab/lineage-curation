@@ -5,7 +5,7 @@ Automated phylogenetic lineage proposal and interactive curation.
 ## Quick Start
 
 **Input**: UShER MAT file (`.pb`)  
-**Output**: Interactive curation interface
+**Output**: Automated sub-lineage proposals (Autolin) and interactive curation interface
 
 ```bash
 # Generate proposals
@@ -23,7 +23,7 @@ Open http://localhost:3000
 
 ## Components
 
-- **[autolin/](autolin/)** - AutoLIN algorithm for lineage proposals
+- **[autolin/](autolin/)** - Autolin algorithm for lineage proposals
 - **[ui/](ui/)** - Web interface for curation
 - **[recombination-detection/](recombination-detection/)** - Recombination analysis
 
