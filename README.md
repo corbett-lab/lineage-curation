@@ -23,12 +23,10 @@ docker run -it -p 3000:3000 -p 8000:8000  -v "$PWD":/workspace -w /workspace lin
 # Generate proposals
 cd autolin
 python propose_sublineages.py -i your_tree.pb -o your_tree.autolin.pb
-python convert_autolinpb_totax.py -a your_tree.autolin.pb
+python convert_autolinpb_totax.py -a your_tree.autolin.pb (creates .jsonl.gz)
 
 # Launch interface  
-cd ../ui/linolium
-npm run install-all && npm run build
-./run-prod.sh ../../autolin/your_tree.autolin.jsonl.gz
+ui/linolium/run-prod.sh ../../autolin/your_tree.autolin.jsonl.gz
 ```
 
 Open http://localhost:3000
