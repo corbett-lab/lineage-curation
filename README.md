@@ -2,16 +2,16 @@
 
 Automated phylogenetic lineage proposal and interactive curation.
 
-## Intallation
+## Installation
 
 Build docker
 ```bash
-docker build -t taxalin .
+docker build -t lineage-curation .
 ```
 
 Run docker container
 ```bash
-docker run -it -p 3000:3000 -p 8000:8000  -v "$PWD":/workspace -w /workspace taxalin
+docker run -it -p 3000:3000 -p 8000:8000  -v "$PWD":/workspace -w /workspace lineage-curation
 ```
 
 ## Quick Start
@@ -32,12 +32,6 @@ npm run install-all && npm run build
 ```
 
 Open http://localhost:3000
-
-## Docker Container (Recommended)
-```bash
-docker build -t lineage-curation .
-docker run -p 3000:3000 -p 8001:8001 -v $(pwd):/data -it lineage-curation
-```
 
 ## Test with Sample Data
 
