@@ -2,6 +2,18 @@
 
 Automated phylogenetic lineage proposal and interactive curation.
 
+## Intallation
+
+Build docker
+```bash
+docker build -t taxalin .
+```
+
+Run docker container
+```bash
+docker run -it -p 3000:3000 -p 8000:8000  -v "$PWD":/workspace -w /workspace taxalin
+```
+
 ## Quick Start
 
 **Input**: UShER MAT file (`.pb`)  

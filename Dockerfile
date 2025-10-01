@@ -46,15 +46,15 @@ RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkg
 
 RUN conda install -n base mamba
 
-# Set working directory
-WORKDIR /app
+# # Set working directory
+WORKDIR /workspace
 
 
 
 # COPY ui/taxonium/taxonium-backend /app/taxonium-backend
 # COPY ui/linolium/dist /app/linolium/dist
 
-COPY env.yml /app/env.yml
+COPY env.yml /workspace/env.yml
 
 RUN conda init
 
@@ -64,7 +64,7 @@ RUN conda env create -f env.yml && \
 
 RUN mamba run -n taxalin mamba install -c conda-forge boost=1.85 -y
 
-COPY . /app
+# COPY . /app
 
 
 RUN conda init bash
