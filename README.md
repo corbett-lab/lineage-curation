@@ -21,11 +21,11 @@ npm run install-all && npm run build
 
 Open http://localhost:3000
 
-## Components
-
-- **[autolin/](autolin/)** - Autolin algorithm for lineage proposals
-- **[ui/](ui/)** - Web interface for curation
-- **[recombination-detection/](recombination-detection/)** - Recombination analysis
+## Docker Container (Recommended)
+```bash
+docker build -t lineage-curation .
+docker run -p 3000:3000 -p 8001:8001 -v $(pwd):/data -it lineage-curation
+```
 
 ## Test with Sample Data
 
@@ -36,3 +36,10 @@ python convert_autolinpb_totax.py -a mtb.4.8.autolin.pb
 cd ../ui/linolium
 ./run-prod.sh ../../autolin/mtb.4.8.autolin.jsonl.gz
 ```
+
+
+## Components
+
+- **[autolin/](autolin/)** - Autolin algorithm for lineage proposals
+- **[ui/](ui/)** - Web interface for curation
+- **[recombination-detection/](recombination-detection/)** - Recombination analysis
