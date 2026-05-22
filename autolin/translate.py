@@ -18,6 +18,7 @@ Usage:
 
 from dataclasses import dataclass
 from typing import Optional
+from collections import defaultdict
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +282,7 @@ def build_position_index(genes: dict) -> dict:
     aa_position is 1-based amino acid position.
     codon_start is the 1-based genome position of the first base of that codon.
     """
-    index = {}  # {(chrom, nt_pos): [(gene_id, aa_pos, codon_genome_start), ...]}
+    index = {}  # {(chrom, nt_pos): [(gene_id, aa_pos, codon_start_idx, nt_positions), ...]}
 
     for gene_id, gene in genes.items():
         chrom = gene['chrom']
@@ -315,26 +316,6 @@ def build_position_index(genes: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Codon extraction from a mutable sequence state
 # ---------------------------------------------------------------------------
-
-'''
-def get_codon(nt_positions: list, codon_start_idx: int, seq_state: dict, chrom: str, ref_seq: str) -> str:
-    """
-    Get the 3-base codon starting at codon_start_idx within nt_positions,
-    using seq_state overrides (mutations) where available, else reference.
-    """
-    codon = []
-    for i in range(codon_start_idx, codon_start_idx + 3):
-        if i >= len(nt_positions):
-            return None
-        pos = nt_positions[i]
-        key = (chrom, pos)
-        if key in seq_state:
-            codon.append(seq_state[key])
-        else:
-            # ref_seq is 0-indexed, GTF positions are 1-based
-            codon.append(ref_seq[pos - 1])
-    return ''.join(codon)
-'''
 
 def get_codon(nt_positions: list, codon_start_idx: int, seq_state: dict, chrom: str, ref_seq: str, strand: str = '+') -> str:
     codon = []
@@ -386,7 +367,7 @@ def parse_mutation(mut_string: str, default_chrom: str = None):
 # Main translation function
 # ---------------------------------------------------------------------------
 
-def translate_tree(tree, gtf_path: str, fasta_path: str, default_chrom: str = None) -> dict:
+def translate_tree(tree, gtf_path: str, fasta_path: str, default_chrom: str = None, debug_multi_codon: bool = False) -> dict:
     """
     Replacement for bte.MATree.translate().
 
@@ -400,6 +381,7 @@ def translate_tree(tree, gtf_path: str, fasta_path: str, default_chrom: str = No
         fasta_path:     Path to a reference FASTA file
         default_chrom:  Chromosome name to assume for mutations without a
                         chrom prefix. If None, inferred from the FASTA.
+        debug_multi_codon: If True, print diagnostic info about multi-mutation codons
 
     Returns:
         dict: {node_id: [AAChange, ...]}
@@ -440,8 +422,10 @@ def translate_tree(tree, gtf_path: str, fasta_path: str, default_chrom: str = No
     root = nodes[0]
     seq_state_map[root.id] = {}
 
-    #bug below need to detect if multiple mutations fall in the same codon and handle them together instead of sequentially applying them and potentially getting intermediate nonsense mutations that mask downstream changes in the same codon. maybe just group by codon first and then apply all mutations to that codon at once?
-    '''
+    # Track multi-codon statistics
+    multi_codon_count = 0
+    multi_codon_mutations = 0
+    
     for node in nodes:
         # Get parent's accumulated state
         if node.id == root.id:
@@ -450,61 +434,103 @@ def translate_tree(tree, gtf_path: str, fasta_path: str, default_chrom: str = No
             parent_id = node.parent.id if node.parent else root.id
             parent_state = seq_state_map.get(parent_id, {})
 
-        # Copy parent state and apply this node's mutations
+        # Copy parent state and prepare to apply this node's mutations
         node_state = dict(parent_state)
         node_aa_changes = []
 
+        # Group mutations by which codon they affect
+        codon_mutation_groups = defaultdict(list)
+        
         for mut_str in node.mutations:
             parsed = parse_mutation(mut_str, default_chrom)
             if parsed is None:
                 continue
             chrom, ref_nt, pos, alt_nt = parsed
 
-            # Apply mutation to accumulated state
-            node_state[(chrom, pos)] = alt_nt
-
             # Check if this position is in any CDS
             entries = position_index.get((chrom, pos), [])
             for (gene_id, aa_pos, codon_start_idx, nt_positions) in entries:
-                gene = genes[gene_id]
-                ref_seq = ref_seqs.get(chrom, ref_seqs.get(default_chrom, ''))
+                codon_key = (gene_id, aa_pos, codon_start_idx, tuple(nt_positions), chrom)
+                codon_mutation_groups[codon_key].append((mut_str, chrom, ref_nt, pos, alt_nt))
 
-                # Get reference codon (no mutations applied)
-                #ref_codon = get_codon(nt_positions, codon_start_idx, parent_state, chrom, ref_seq)
-                # Get alt codon (with this node's mutations applied)
-                #alt_codon = get_codon(nt_positions, codon_start_idx, node_state, chrom, ref_seq)
+        # Process each codon that has mutations
+        for codon_key, mutations_in_codon in codon_mutation_groups.items():
+            gene_id, aa_pos, codon_start_idx, nt_positions, chrom = codon_key
+            nt_positions = list(nt_positions)  # Convert back from tuple
+            gene = genes[gene_id]
+            strand = gene['strand']
+            ref_seq = ref_seqs.get(chrom, ref_seqs.get(default_chrom, ''))
 
-                strand = genes[gene_id]['strand']
-                # Get reference codon (no mutations applied)
-                ref_codon = get_codon(nt_positions, codon_start_idx, parent_state, chrom, ref_seq, strand)
-                # Get alt codon (with this node's mutations applied)
-                alt_codon = get_codon(nt_positions, codon_start_idx, node_state, chrom, ref_seq, strand)
-                
-                if ref_codon is None or alt_codon is None:
-                    continue
+            # Track multi-mutation codons
+            if len(mutations_in_codon) > 1:
+                multi_codon_count += 1
+                multi_codon_mutations += len(mutations_in_codon)
+                if debug_multi_codon:
+                    gene_name = gene['name']
+                    mut_strs = [m[0] for m in mutations_in_codon]
+                    print(f"Multi-mutation codon: {node.id} gene={gene_name} aa_pos={aa_pos} muts={mut_strs}")
 
-                ref_aa = translate_codon(ref_codon)
-                alt_aa = translate_codon(alt_codon)
+            # Get reference codon (with parent's mutations only)
+            ref_codon = get_codon(nt_positions, codon_start_idx, parent_state, chrom, ref_seq, strand)
+            
+            # Apply ALL mutations in this codon to node_state
+            temp_state = dict(node_state)
+            for mut_str, chrom, ref_nt, pos, alt_nt in mutations_in_codon:
+                temp_state[(chrom, pos)] = alt_nt
+            
+            # Get alt codon with ALL mutations applied
+            alt_codon = get_codon(nt_positions, codon_start_idx, temp_state, chrom, ref_seq, strand)
+            
+            if ref_codon is None or alt_codon is None:
+                continue
 
-                if ref_aa is None or alt_aa is None:
-                    continue
+            ref_aa = translate_codon(ref_codon)
+            alt_aa = translate_codon(alt_codon)
 
-                change = AAChange(
-                    gene=gene['name'],
-                    ref_aa=ref_aa,
-                    alt_aa=alt_aa,
-                    position=aa_pos,
-                    ref_codon=ref_codon,
-                    alt_codon=alt_codon,
-                    nt_position=pos,
-                    ref_nt=ref_nt,
-                    alt_nt=alt_nt,
-                    strand=strand
-                )
-                node_aa_changes.append(change)
+            if ref_aa is None or alt_aa is None:
+                continue
+
+            # Only create ONE AAChange per codon, even if multiple mutations
+            # Use the first mutation's position as representative
+            first_mut = mutations_in_codon[0]
+            _, _, ref_nt, pos, alt_nt = first_mut
+
+            change = AAChange(
+                gene=gene['name'],
+                ref_aa=ref_aa,
+                alt_aa=alt_aa,
+                position=aa_pos,
+                ref_codon=ref_codon,
+                alt_codon=alt_codon,
+                nt_position=pos,
+                ref_nt=ref_nt,
+                alt_nt=alt_nt,
+                strand=strand
+            )
+            node_aa_changes.append(change)
+
+        # Apply ALL mutations to node_state (not just coding ones)
+        for mut_str in node.mutations:
+            parsed = parse_mutation(mut_str, default_chrom)
+            if parsed is None:
+                continue
+            chrom, ref_nt, pos, alt_nt = parsed
+            node_state[(chrom, pos)] = alt_nt
 
         if node_aa_changes:
-            results[node.id] = node_aa_changes
+            # Deduplicate - overlapping genes can create duplicate AAChanges
+            seen = set()
+            unique_changes = []
+            for change in node_aa_changes:
+                key = (change.gene, change.position, change.ref_aa, change.alt_aa)
+                if key not in seen:
+                    seen.add(key)
+                    unique_changes.append(change)
+            
+            if len(node_aa_changes) != len(unique_changes):
+                print(f"Node {node.id}: {len(node_aa_changes)} changes -> {len(unique_changes)} unique")
+            
+            results[node.id] = unique_changes
 
         # Store this node's state for its children
         seq_state_map[node.id] = node_state
@@ -513,42 +539,11 @@ def translate_tree(tree, gtf_path: str, fasta_path: str, default_chrom: str = No
         # (optional memory optimization for very large trees)
         if node.is_leaf():
             seq_state_map.pop(node.id, None)
-    '''
 
-    
     print(f"Done. Found coding mutations in {len(results)} nodes.")
+    print(f"Multi-mutation codons: {multi_codon_count} codons, {multi_codon_mutations} total mutations")
     
-    from collections import defaultdict
-
-    multi_codon_nodes = 0
-    total_multi_codon_mutations = 0
-
-    for node in tree.depth_first_expansion():
-        if not node.mutations:
-            continue
-        
-        # Group mutations by which codon they fall in
-        codon_hits = defaultdict(list)
-        for mut_str in node.mutations:
-            parsed = parse_mutation(mut_str, default_chrom)
-            if parsed is None:
-                continue
-            chrom, ref_nt, pos, alt_nt = parsed
-            entries = position_index.get((chrom, pos), [])
-            for (gene_id, aa_pos, codon_start_idx, nt_positions) in entries:
-                codon_hits[(gene_id, aa_pos)].append(mut_str)
-        
-        for codon_key, muts in codon_hits.items():
-            if len(muts) > 1:
-                multi_codon_nodes += 1
-                total_multi_codon_mutations += len(muts)
-                print(f"{node.id} {codon_key} {muts}")
-
-    print(f"Total nodes with multi-mutation codons: {multi_codon_nodes}")
-    print(f"Total mutations in multi-mutation codons: {total_multi_codon_mutations}")
-        
     return results
-    
 
 
 # ---------------------------------------------------------------------------
@@ -585,6 +580,19 @@ def summarize(results: dict) -> dict:
         for c in changes:
             counts[c.mutation_type()] += 1
     return counts
+
+def summarize_by_node(results: dict) -> dict:
+    """
+    Return counts of each mutation type for each node.
+    Returns: {node_id: {'synonymous': X, 'nonsense': X, 'conservative': X, 'radical': X}}
+    """
+    node_summaries = {}
+    for node_id, changes in results.items():
+        counts = {'synonymous': 0, 'nonsense': 0, 'conservative': 0, 'radical': 0}
+        for c in changes:
+            counts[c.mutation_type()] += 1
+        node_summaries[node_id] = counts
+    return node_summaries
 
 
 def to_dataframe(results: dict):
