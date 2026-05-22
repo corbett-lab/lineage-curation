@@ -87,6 +87,8 @@ node server.js --port 8001 &\n\
 BACKEND_PID=$!\n\
 \n\
 # Wait for backend to initialize\n\
+echo "Wait for backend to initialize...."\n\
+
 sleep 2\n\
 \n\
 # Start frontend server\n\
