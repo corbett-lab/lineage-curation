@@ -90,6 +90,7 @@ To compare the level of clade rearrangement caused by this feature weighting, we
 
 A noticeable improvement in lineage suggestion can be observed for auto.4.8.1.1 (red square in 3A)(Figure 3C) where TB profiler predicted resistance weights change the size of lineage auto.4.8.1.1 (yellow) (in comparison with the unweighted suggestion in 3B) based on the concentration of predicted multi-drug resistant samples (MDR-TB) (red circles 3C). With phenotype weighting, a small, likely biologically irrelevant clade in purple is omitted. 
 
+### Weighting mutations for lineage designation
 
 ### Getting lineage designations into Taxonium
 To create a file for visualization in Taxonium users should use the `-o` or `--output` flag in propose_sublineages.py. Supply an output MAT name `{your tree}autolin.pb`. This output file will have both existing and proposed autolin annotations on the internal nodes. To convert this file into a `jsonl.gz` type for taxonium, use usher_to_taxonium which is available in TaxoniumTools https://github.com/theosanderson/taxonium/tree/master/taxoniumtools. 
