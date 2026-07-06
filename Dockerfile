@@ -56,10 +56,12 @@ RUN npm install && \
 COPY ui/linolium /app/ui
 RUN NODE_OPTIONS="--max-old-space-size=8192" npm run build
 
-# Copy Python tools and data
+# Copy the autolin Python scripts. Only the scripts are needed at runtime — the
+# pipeline reads/writes the uploaded file's directory, never the example data
+# files that live alongside the scripts in the repo, so those are left out of
+# the image to keep it small.
 WORKDIR /app
-COPY autolin /app/autolin
-COPY data /app/data
+COPY autolin/*.py /app/autolin/
 
 RUN mkdir -p /data
 
