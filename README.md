@@ -9,7 +9,7 @@ Linolium provides an environment for lineage discovery and curation on pathogen 
 ## Quick Start
 
 ```bash
-docker run -it --memory=8g -v "$PWD":/data -p 3000:3000 ghcr.io/corbett-lab/lineage-curation
+docker run -it --memory=8g -v "$PWD":/data -p 3000:3000 ghcr.io/corbett-lab/linolium
 ```
 
 Open [http://localhost:3000](http://localhost:3000), upload a `.pb` or `.pb.gz` file, and run the pipeline.
