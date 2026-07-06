@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import LauncherApp from './LauncherApp';
+import { BACKEND_URL } from './config';
 
 const Taxonium = lazy(() => import('taxonium-component'));
 
@@ -82,7 +83,7 @@ function App() {
   // Check if backend has loaded data (not just running)
   const checkDataReady = async () => {
     try {
-      const response = await fetch('http://localhost:8001/config')
+      const response = await fetch(`${BACKEND_URL}/config`)
       if (response.ok) {
         const config = await response.json()
         // Check if we have actual nodes loaded
@@ -111,7 +112,7 @@ function App() {
       try {
         setLoadingMessage('Loading tree data...')
         
-        const response = await fetch('http://localhost:8001/reload-data', {
+        const response = await fetch(`${BACKEND_URL}/reload-data`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dataFile: file })
@@ -163,7 +164,7 @@ function App() {
       <div className="error-container">
         <h2>Backend Server Error</h2>
         <p>{backendError}</p>
-        <p>Make sure the backend server is running on port 8001</p>
+        <p>Make sure the backend server is running and reachable.</p>
         <button onClick={handleBackToLauncher} style={{ marginTop: '20px', padding: '10px 20px' }}>
           Back to Launcher
         </button>
@@ -203,7 +204,7 @@ function App() {
       <div className="h-full" style={{ flex: 1, minHeight: 0 }}>
         <Suspense fallback={<LoadingScreen message="Loading viewer components..." />}>
           <Taxonium
-            backendUrl="http://localhost:8001"
+            backendUrl={BACKEND_URL}
             sidePanelHiddenByDefault={false}
             pipelineDownloads={pipelineDownloads}
           />

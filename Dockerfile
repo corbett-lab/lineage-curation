@@ -62,7 +62,12 @@ COPY autolin /app/autolin
 COPY data /app/data
 
 RUN mkdir -p /data
-EXPOSE 3000 8001
+
+# Single-origin: only the frontend port is exposed. The backend runs internally
+# and vite reverse-proxies API calls to it (BACKEND_PORT, overridable at runtime
+# with `docker run -e BACKEND_PORT=...`). Remap the app freely with `-p 8080:3000`.
+ENV BACKEND_PORT=8001
+EXPOSE 3000
 
 # Setup shell
 RUN conda init bash && echo "conda activate taxalin" >> /root/.bashrc
@@ -82,13 +87,12 @@ echo ""\n\
 \n\
 # Start backend server in launcher mode (no data file)\n\
 cd /app/ui/taxonium_backend\n\
-echo "🔌 Starting backend on port 8001..."\n\
-node server.js --port 8001 &\n\
+echo "🔌 Starting backend on port ${BACKEND_PORT:-8001}..."\n\
+node server.js --port ${BACKEND_PORT:-8001} &\n\
 BACKEND_PID=$!\n\
 \n\
 # Wait for backend to initialize\n\
-echo "Wait for backend to initialize...."\n\
-
+echo "Waiting for backend to initialize..."\n\
 sleep 2\n\
 \n\
 # Start frontend server\n\
