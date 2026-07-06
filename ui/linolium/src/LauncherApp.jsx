@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { BACKEND_URL } from './config';
 
 /**
  * LauncherApp - A modern, sleek launcher UI for the lineage curation pipeline
@@ -137,7 +138,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const uploadResponse = await fetch('http://localhost:8001/upload', {
+      const uploadResponse = await fetch(`${BACKEND_URL}/upload`, {
         method: 'POST',
         body: formData
       });
@@ -155,7 +156,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       addLog('Running propose_sublineages.py...');
       addLog(`Parameters: minsamples=${params.minsamples}, distinction=${params.distinction}, recursive=${params.recursive}`);
 
-      const proposeResponse = await fetch('http://localhost:8001/run-autolin', {
+      const proposeResponse = await fetch(`${BACKEND_URL}/run-autolin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -269,7 +270,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       setProgress(50);
       
       // Check if backend is ready with sample data
-      const response = await fetch('http://localhost:8001/config');
+      const response = await fetch(`${BACKEND_URL}/config`);
       if (response.ok) {
         setProgress(100);
         setStage(STAGES.COMPLETE);
@@ -933,7 +934,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
               <a
                 key={i}
                 className="btn btn-secondary download-btn"
-                href={`http://localhost:8001/download?path=${encodeURIComponent(dl.path)}`}
+                href={`${BACKEND_URL}/download?path=${encodeURIComponent(dl.path)}`}
                 download={dl.name}
               >
                 {dl.name.endsWith('.tsv') ? '.tsv' : dl.name.endsWith('.pb.gz') ? '.pb.gz' : '.jsonl.gz'}
