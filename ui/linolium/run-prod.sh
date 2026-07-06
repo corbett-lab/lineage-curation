@@ -11,10 +11,16 @@ set -e
 
 DATA_FILE=${1:-"./XFG.pangoonly.jsonl.gz"}
 
+# Single-origin: only the frontend (port 3000) is user-facing; the backend runs
+# internally and `vite preview` reverse-proxies API calls to it. BACKEND_PORT is
+# never exposed to the browser, so set it to any free port — no rebuild needed.
+#   BACKEND_PORT=8002 ./run-prod.sh ...
+export BACKEND_PORT="${BACKEND_PORT:-8001}"
+
 echo "🔧 Starting Taxonium Production Server"
 echo "📊 Data file: $DATA_FILE"
 echo "🌐 Frontend will be available at: http://localhost:3000"
-echo "🔌 Backend will be available at: http://localhost:8001"
+echo "🔌 Backend (internal, proxied via the frontend) on port: $BACKEND_PORT"
 echo ""
 
 # Check if data file exists (handle both relative and absolute paths)
@@ -43,8 +49,8 @@ echo "🚀 Starting servers..."
 # Start backend with custom data file
 cd taxonium_backend
 npm install
-echo "🔄 Starting backend on port 8001..."
-node server.js --port 8001 --data_file "$BACKEND_DATA_FILE" &
+echo "🔄 Starting backend on port $BACKEND_PORT..."
+node server.js --port "$BACKEND_PORT" --data_file "$BACKEND_DATA_FILE" &
 BACKEND_PID=$!
 
 # Wait a bit for backend to start
