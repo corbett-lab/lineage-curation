@@ -962,7 +962,7 @@ const LineageTools = React.memo<LineageToolsProps>(({
               {['.jsonl.gz', '.pb.gz', '.tsv'].map(ext => {
                 const dl = pipelineDownloads.find(d => d.name.endsWith(ext));
                 return dl ? (
-                  <a key={ext} href={`http://localhost:8001/download?path=${encodeURIComponent(dl.path)}`} download={dl.name} className="flex-1 text-center text-gray-500 hover:text-gray-700 underline" style={{ fontSize: '10px' }}>{ext}</a>
+                  <a key={ext} href={`${backend?.backend_url ?? ''}/download?path=${encodeURIComponent(dl.path)}`} download={dl.name} className="flex-1 text-center text-gray-500 hover:text-gray-700 underline" style={{ fontSize: '10px' }}>{ext}</a>
                 ) : (
                   <span key={ext} className="flex-1 text-center text-gray-300" style={{ fontSize: '10px' }}>{ext}</span>
                 );
