@@ -959,13 +959,21 @@ const LineageTools = React.memo<LineageToolsProps>(({
           {pipelineDownloads && pipelineDownloads.length > 0 && (
             <div className="flex items-center gap-1 text-gray-500">
               <span className="text-gray-400" style={{ width: '42px', flexShrink: 0 }}>Original</span>
-              {['.jsonl.gz', '.pb.gz', '.tsv'].map(ext => {
-                const dl = pipelineDownloads.find(d => d.name.endsWith(ext));
-                return dl ? (
-                  <a key={ext} href={`${backend?.backend_url ?? ''}/download?path=${encodeURIComponent(dl.path)}`} download={dl.name} className="flex-1 text-center text-gray-500 hover:text-gray-700 underline" style={{ fontSize: '10px' }}>{ext}</a>
-                ) : (
-                  <span key={ext} className="flex-1 text-center text-gray-300" style={{ fontSize: '10px' }}>{ext}</span>
-                );
+              {['.jsonl.gz', '.pb.gz', '.tsv', '.jsonl', '.pb'].filter((e, i, a) => ['.jsonl.gz','.pb.gz','.tsv'].includes(e)).map(ext => {
+                // Match by name or filename; tolerate missing fields (backendless in-memory downloads).
+                const nameOf = (d: any) => (d && (d.name || d.filename)) || '';
+                const dl = pipelineDownloads.find((d: any) => {
+                  const n = nameOf(d);
+                  if (ext === '.jsonl.gz') return n.endsWith('.jsonl.gz') || n.endsWith('.jsonl');
+                  if (ext === '.pb.gz') return n.endsWith('.pb.gz') || n.endsWith('.pb');
+                  return n.endsWith(ext);
+                });
+                if (!dl) return <span key={ext} className="flex-1 text-center text-gray-300" style={{ fontSize: '10px' }}>{ext}</span>;
+                // Backendless: download from an in-memory Blob if present; else fall back to the backend path.
+                if ((dl as any).blob) {
+                  return <button key={ext} onClick={() => { const u = URL.createObjectURL((dl as any).blob); const a = document.createElement('a'); a.href = u; a.download = nameOf(dl); document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u); }} className="flex-1 text-center text-gray-500 hover:text-gray-700 underline bg-transparent border-0 cursor-pointer p-0" style={{ fontSize: '10px' }}>{ext}</button>;
+                }
+                return <a key={ext} href={`${backend?.backend_url ?? ''}/download?path=${encodeURIComponent((dl as any).path ?? '')}`} download={nameOf(dl)} className="flex-1 text-center text-gray-500 hover:text-gray-700 underline" style={{ fontSize: '10px' }}>{ext}</a>;
               })}
             </div>
           )}

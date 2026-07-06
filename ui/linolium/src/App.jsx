@@ -1,6 +1,5 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import LauncherApp from './LauncherApp';
-import { BACKEND_URL } from './config';
 
 const Taxonium = lazy(() => import('taxonium-component'));
 
@@ -78,64 +77,27 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('')
   const [outputFile, setOutputFile] = useState(null)
+  const [sourceData, setSourceData] = useState(null)   // in-memory Taxonium jsonl (backendless)
   const [pipelineDownloads, setPipelineDownloads] = useState([])
-  
-  // Check if backend has loaded data (not just running)
-  const checkDataReady = async () => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/config`)
-      if (response.ok) {
-        const config = await response.json()
-        // Check if we have actual nodes loaded
-        if (config.num_nodes && config.num_nodes > 0) {
-          return true
-        }
-      }
-      return false
-    } catch (error) {
-      return false
-    }
-  }
 
-  // Handle launching Taxonium from the launcher
-  const handleLaunchTaxonium = async (file) => {
-    // Prevent multiple launches
+  // Handle launching Taxonium from the launcher. The launcher now hands us the
+  // in-memory `sourceData` (a Taxonium SourceData object) produced entirely in the
+  // browser — there is no server to reload data into.
+  const handleLaunchTaxonium = async (launchSourceData) => {
     if (isLoading) return;
-    
     setIsLoading(true)
     setBackendError(null)
-    setOutputFile(file)
-    setLoadingMessage('Starting data reload...')
-    
-    // If we have a new file (not sample mode), reload and wait
-    if (file && file !== 'sample') {
-      try {
-        setLoadingMessage('Loading tree data...')
-        
-        const response = await fetch(`${BACKEND_URL}/reload-data`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dataFile: file })
-        })
-        
-        if (!response.ok) {
-          const error = await response.json()
-          throw new Error(error.error || 'Failed to reload data')
-        }
-        
-        const result = await response.json()
-        console.log('Data reloaded:', result.nodes, 'nodes')
-        setLoadingMessage(`Loaded ${result.nodes?.toLocaleString() || ''} nodes`)
-        
-      } catch (error) {
-        console.error('Failed to reload data:', error)
-        setBackendError(error.message)
-        setIsLoading(false)
-        return
-      }
+    setLoadingMessage('Preparing viewer…')
+
+    if (!launchSourceData) {
+      setBackendError('No tree data was produced by the pipeline.')
+      setIsLoading(false)
+      return
     }
-    
-    // Data is ready, switch to Taxonium
+    setSourceData(launchSourceData)
+    setOutputFile('client')
+
+    // Data lives in memory; hand it to the local-backend viewer.
     setBackendReady(true)
     setIsLoading(false)
     setView('taxonium')
@@ -145,6 +107,8 @@ function App() {
   const handleBackToLauncher = () => {
     setView('launcher')
     setOutputFile(null)
+    setSourceData(null)
+    setBackendReady(false)
     setIsLoading(false)
   }
 
@@ -204,7 +168,7 @@ function App() {
       <div className="h-full" style={{ flex: 1, minHeight: 0 }}>
         <Suspense fallback={<LoadingScreen message="Loading viewer components..." />}>
           <Taxonium
-            backendUrl={BACKEND_URL}
+            sourceData={sourceData}
             sidePanelHiddenByDefault={false}
             pipelineDownloads={pipelineDownloads}
           />

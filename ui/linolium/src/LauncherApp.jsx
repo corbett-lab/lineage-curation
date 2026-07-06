@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { BACKEND_URL } from './config';
+import { runClientPipeline } from './clientPipeline';
 
 /**
  * LauncherApp - A modern, sleek launcher UI for the lineage curation pipeline
@@ -59,6 +59,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState(null);
   const [outputFile, setOutputFile] = useState(null);
+  const [sourceData, setSourceData] = useState(null); // in-memory Taxonium jsonl (backendless)
   const [downloads, setDownloads] = useState([]);
 
   // Logs container ref for auto-scroll
@@ -130,115 +131,42 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
     setProgress(0);
 
     try {
-      // Stage 1: Upload file
-      setStage(STAGES.UPLOADING);
-      addLog('Uploading file to server...');
+      // Everything runs in the browser — no server upload, no /run-autolin.
+      // AutoLin (Pyodide + pure-Python bte shim) then the JS matUtils/usher_to_taxonium
+      // ports, orchestrated by runClientPipeline over two web workers.
+      addLog(`File: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+      addLog(`Parameters: minsamples=${params.minsamples}, distinction=${params.distinction}, recursive=${params.recursive}`);
       setProgress(10);
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const uploadResponse = await fetch(`${BACKEND_URL}/upload`, {
-        method: 'POST',
-        body: formData
+      const result = await runClientPipeline(file, params, {
+        onLog: (message) => addLog(message),
+        onStage: (s) => {
+          if (s === 'loading') { setStage(STAGES.PROPOSING); setProgress(20); addLog('Loading Pyodide runtime…'); }
+          else if (s === 'proposing') { setStage(STAGES.PROPOSING); setProgress(40); }
+          else if (s === 'converting') { setStage(STAGES.CONVERTING); setProgress(70); }
+          else if (s === 'done') { setProgress(90); }
+        },
       });
 
-      if (!uploadResponse.ok) {
-        throw new Error(`Upload failed: ${uploadResponse.statusText}`);
-      }
+      addLog(`Pipeline complete: ${result.nLineages} lineages proposed`, 'success');
+      setSourceData(result.sourceData);
+      setOutputFile('client');   // sentinel: data is in memory, not a server path
 
-      const uploadResult = await uploadResponse.json();
-      addLog(`File uploaded: ${uploadResult.filename}`, 'success');
-      setProgress(25);
-
-      // Stage 2: Run propose_sublineages
-      setStage(STAGES.PROPOSING);
-      addLog('Running propose_sublineages.py...');
-      addLog(`Parameters: minsamples=${params.minsamples}, distinction=${params.distinction}, recursive=${params.recursive}`);
-
-      const proposeResponse = await fetch(`${BACKEND_URL}/run-autolin`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inputFile: uploadResult.path,
-          params: {
-            minsamples: params.minsamples,
-            distinction: params.distinction,
-            recursive: params.recursive,
-            cutoff: params.cutoff,
-            floor: params.floor,
-            verbose: params.verbose,
-            clear: params.clear
-          }
-        })
-      });
-
-      if (!proposeResponse.ok) {
-        const errorData = await proposeResponse.json();
-        throw new Error(errorData.error || 'Pipeline failed');
-      }
-
-      // Stream logs from the response
-      const reader = proposeResponse.body.getReader();
-      const decoder = new TextDecoder();
-      let pipelineResult = null;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const text = decoder.decode(value);
-        const lines = text.split('\n').filter(line => line.trim());
-
-        for (const line of lines) {
-          try {
-            const data = JSON.parse(line);
-            
-            if (data.type === 'log') {
-              addLog(data.message);
-            } else if (data.type === 'stage') {
-              if (data.stage === 'proposing') {
-                setStage(STAGES.PROPOSING);
-                setProgress(40);
-              } else if (data.stage === 'converting') {
-                setStage(STAGES.CONVERTING);
-                setProgress(60);
-              } else if (data.stage === 'summary') {
-                setProgress(80);
-              }
-            } else if (data.type === 'complete') {
-              pipelineResult = data;
-            } else if (data.type === 'error') {
-              throw new Error(data.message);
-            }
-          } catch (parseError) {
-            // Not JSON, treat as plain log
-            if (line.trim()) {
-              addLog(line);
-            }
-          }
-        }
-      }
-
-      if (!pipelineResult) {
-        throw new Error('Pipeline did not return a result');
-      }
-
-      setProgress(90);
-      addLog(`Pipeline complete! Output: ${pipelineResult.outputFile}`, 'success');
-      setOutputFile(pipelineResult.outputFile);
-      if (pipelineResult.downloads) {
-        setDownloads(pipelineResult.downloads);
-        if (onDownloadsReady) onDownloadsReady(pipelineResult.downloads);
-      }
-
-      // Stage 3: Load viewer
-      setStage(STAGES.LOADING);
-      addLog('Starting Taxonium viewer...');
-      setProgress(95);
-
-      // Small delay to ensure backend is ready
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Offer in-memory downloads (annotated .pb, TSVs, jsonl) without a backend
+      const dl = [
+        { label: 'Annotated protobuf (.pb)', filename: 'autolin.pb',
+          blob: new Blob([result.annotatedPb], { type: 'application/octet-stream' }) },
+        { label: 'Proposed sublineages (dump.tsv)', filename: 'autolin.dump.tsv',
+          blob: new Blob([result.dumpTsv], { type: 'text/tab-separated-values' }) },
+        { label: 'Sample labels (labels.tsv)', filename: 'autolin.labels.tsv',
+          blob: new Blob([result.labelsTsv], { type: 'text/tab-separated-values' }) },
+        { label: 'Sample clade summary (.tsv)', filename: 'autolin.summary.tsv',
+          blob: new Blob([result.summaryTsv], { type: 'text/tab-separated-values' }) },
+        { label: 'Taxonium (.jsonl)', filename: 'autolin.jsonl',
+          blob: new Blob([result.jsonl], { type: 'application/json' }) },
+      ];
+      setDownloads(dl);
+      if (onDownloadsReady) onDownloadsReady(dl);
 
       setStage(STAGES.COMPLETE);
       setProgress(100);
@@ -250,35 +178,41 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       setError(err.message);
       addLog(`Error: ${err.message}`, 'error');
     }
-  }, [file, params, addLog]);
+  }, [file, params, addLog, onDownloadsReady]);
 
-  // Launch Taxonium viewer
+  // Launch Taxonium viewer — hand the in-memory jsonl (sourceData) to the viewer;
+  // no backend path is passed, so Taxonium runs on its local worker.
   const handleLaunch = useCallback(() => {
     if (onLaunchTaxonium) {
-      onLaunchTaxonium(outputFile);
+      onLaunchTaxonium(sourceData);
     }
-  }, [onLaunchTaxonium, outputFile]);
+  }, [onLaunchTaxonium, sourceData]);
 
-  // Use sample data
+  // Use sample data — a pre-computed Taxonium jsonl shipped as a static asset
+  // (public/mtb.4.8.autolin.r.jsonl.gz). Loaded via the viewer's own fetch
+  // (status:'url_supplied'), so no backend is involved.
   const useSampleData = useCallback(async () => {
     setError(null);
     setLogs([]);
-    addLog('Using sample data...');
-    
+    addLog('Loading sample tree (MTB lineage 4.8)…');
+
     try {
       setStage(STAGES.LOADING);
       setProgress(50);
-      
-      // Check if backend is ready with sample data
-      const response = await fetch(`${BACKEND_URL}/config`);
-      if (response.ok) {
-        setProgress(100);
-        setStage(STAGES.COMPLETE);
-        addLog('Sample data loaded!', 'success');
-        setOutputFile('sample');
-      } else {
-        throw new Error('Backend not ready');
-      }
+      // Absolute URL (origin + base) — the local backend runs in a Blob-URL worker
+      // context that cannot resolve a root-relative path. Filename carries 'jsonl'
+      // + 'gz' so the worker gunzips and parses it.
+      const base = import.meta.env.BASE_URL || '/';
+      const url = new URL(`${base}mtb.4.8.autolin.r.jsonl.gz`, window.location.origin).href;
+      setSourceData({
+        status: 'url_supplied',
+        filename: url,
+        filetype: 'jsonl',
+      });
+      setProgress(100);
+      setStage(STAGES.COMPLETE);
+      setOutputFile('client');
+      addLog('Sample data ready!', 'success');
     } catch (err) {
       setStage(STAGES.ERROR);
       setError(err.message);
@@ -934,14 +868,21 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           <div className="section-title">Download Autolin results</div>
           <div className="downloads-row">
             {downloads.map((dl, i) => (
-              <a
+              <button
                 key={i}
                 className="btn btn-secondary download-btn"
-                href={`${BACKEND_URL}/download?path=${encodeURIComponent(dl.path)}`}
-                download={dl.name}
+                title={dl.label}
+                onClick={() => {
+                  // Client-side download from the in-memory Blob — no backend.
+                  const url = URL.createObjectURL(dl.blob);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = dl.filename;
+                  document.body.appendChild(a); a.click();
+                  document.body.removeChild(a); URL.revokeObjectURL(url);
+                }}
               >
-                {dl.name.endsWith('.tsv') ? '.tsv' : dl.name.endsWith('.pb.gz') ? '.pb.gz' : '.jsonl.gz'}
-              </a>
+                {dl.filename.endsWith('.tsv') ? '.tsv' : dl.filename.endsWith('.pb') ? '.pb' : '.jsonl'}
+              </button>
             ))}
           </div>
           </>
