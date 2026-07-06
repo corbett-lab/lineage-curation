@@ -15,7 +15,6 @@ docker run -it --rm --memory=8g \
   -v "$PWD/ui/linolium/taxonium_component/src":/app/ui/taxonium_component/src \
   -v "$PWD/ui/linolium/taxonium_backend":/app/ui/taxonium_backend \
   -v "$PWD/autolin":/app/autolin \
-  -v "$PWD/data":/app/data \
   -v "$PWD":/data \
   -e BACKEND_PORT="$BACKEND_PORT" \
   -p "$PORT:3000" \
