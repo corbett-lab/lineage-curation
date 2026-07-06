@@ -723,10 +723,13 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           onDragLeave={handleDragLeave}
           onClick={() => fileInputRef.current?.click()}
         >
+          {/* accept includes the trailing ".gz": many browsers match the file
+              picker against only the final extension, so ".pb.gz" alone leaves
+              .pb.gz files grayed out. handleFileChange re-validates the choice. */}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pb,.pb.gz"
+            accept=".pb,.pb.gz,.gz,application/gzip"
             onChange={handleFileChange}
             style={{ display: 'none' }}
             disabled={isRunning}
