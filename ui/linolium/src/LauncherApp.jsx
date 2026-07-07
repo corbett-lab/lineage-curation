@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { BACKEND_URL } from './config';
+import { runClientPipeline } from './clientPipeline';
+import { BACKEND_URL, BACKENDLESS } from './config';
 
 /**
  * LauncherApp - A modern, sleek launcher UI for the lineage curation pipeline
@@ -59,6 +60,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState(null);
   const [outputFile, setOutputFile] = useState(null);
+  const [sourceData, setSourceData] = useState(null); // in-memory Taxonium jsonl (backendless)
   const [downloads, setDownloads] = useState([]);
 
   // Logs container ref for auto-scroll
@@ -118,8 +120,10 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
     setParams(prev => ({ ...prev, [key]: value }));
   }, []);
 
-  // Run the pipeline
-  const runPipeline = useCallback(async () => {
+  // Run the pipeline. Accepts an optional File/Blob (used by the sample-data
+  // button); when called as a click handler the event arg is ignored and the
+  // selected `file` state is used instead.
+  const runPipelineServer = useCallback(async () => {
     if (!file) {
       addLog('No file selected', 'error');
       return;
@@ -252,15 +256,87 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
     }
   }, [file, params, addLog]);
 
-  // Launch Taxonium viewer
+  const runPipelineClient = useCallback(async (fileArg) => {
+    const theFile = (fileArg instanceof File || fileArg instanceof Blob) ? fileArg : file;
+    if (!theFile) {
+      addLog('No file selected', 'error');
+      return;
+    }
+
+    setError(null);
+    setLogs([]);
+    setProgress(0);
+
+    try {
+      // Everything runs in the browser — no server upload, no /run-autolin.
+      // AutoLin (Pyodide + pure-Python bte shim) then the JS matUtils/usher_to_taxonium
+      // ports, orchestrated by runClientPipeline over two web workers.
+      addLog(`File: ${theFile.name} (${(theFile.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+      addLog(`Parameters: minsamples=${params.minsamples}, distinction=${params.distinction}, recursive=${params.recursive}`);
+      setProgress(10);
+
+      const result = await runClientPipeline(theFile, params, {
+        onLog: (message) => addLog(message),
+        onStage: (s) => {
+          if (s === 'loading') { setStage(STAGES.PROPOSING); setProgress(20); addLog('Loading Pyodide runtime…'); }
+          else if (s === 'proposing') { setStage(STAGES.PROPOSING); setProgress(40); }
+          else if (s === 'converting') { setStage(STAGES.CONVERTING); setProgress(70); }
+          else if (s === 'done') { setProgress(90); }
+        },
+      });
+
+      addLog(`Pipeline complete: ${result.nLineages} lineages proposed`, 'success');
+      setSourceData(result.sourceData);
+      setOutputFile('client');   // sentinel: data is in memory, not a server path
+
+      // Offer in-memory downloads (annotated .pb, TSVs, jsonl) without a backend
+      const dl = [
+        { label: 'Annotated protobuf (.pb)', filename: 'autolin.pb',
+          blob: new Blob([result.annotatedPb], { type: 'application/octet-stream' }) },
+        { label: 'Proposed sublineages (dump.tsv)', filename: 'autolin.dump.tsv',
+          blob: new Blob([result.dumpTsv], { type: 'text/tab-separated-values' }) },
+        { label: 'Sample labels (labels.tsv)', filename: 'autolin.labels.tsv',
+          blob: new Blob([result.labelsTsv], { type: 'text/tab-separated-values' }) },
+        { label: 'Sample clade summary (.tsv)', filename: 'autolin.summary.tsv',
+          blob: new Blob([result.summaryTsv], { type: 'text/tab-separated-values' }) },
+        { label: 'Taxonium (.jsonl)', filename: 'autolin.jsonl',
+          blob: new Blob([result.jsonl], { type: 'application/json' }) },
+      ];
+      setDownloads(dl);
+      if (onDownloadsReady) onDownloadsReady(dl);
+
+      setStage(STAGES.COMPLETE);
+      setProgress(100);
+      addLog('Ready to view!', 'success');
+
+    } catch (err) {
+      console.error('Pipeline error:', err);
+      setStage(STAGES.ERROR);
+      setError(err.message);
+      addLog(`Error: ${err.message}`, 'error');
+    }
+  }, [file, params, addLog, onDownloadsReady]);
+
+  // Dispatch: backendless (Pyodide, in-browser) vs server (Docker/local backend).
+  const runPipeline = useCallback((fileArg) => (
+    BACKENDLESS ? runPipelineClient(fileArg) : runPipelineServer()
+  ), [runPipelineClient, runPipelineServer]);
+
+  // Launch Taxonium viewer — hand the in-memory jsonl (sourceData) to the viewer;
+  // no backend path is passed, so Taxonium runs on its local worker.
   const handleLaunch = useCallback(() => {
     if (onLaunchTaxonium) {
-      onLaunchTaxonium(outputFile);
+      onLaunchTaxonium(BACKENDLESS ? sourceData : outputFile);
     }
-  }, [onLaunchTaxonium, outputFile]);
+  }, [onLaunchTaxonium, sourceData, outputFile]);
 
-  // Use sample data
-  const useSampleData = useCallback(async () => {
+  // Use sample data — fetch the raw MTB lineage-4.8 protobuf (shipped gzipped as
+  // public/mtb.4.8.pb.gz), decompress it in the browser, and run the FULL AutoLin
+  // pipeline on it — exactly as if the user had uploaded mtb.4.8.pb. This exercises
+  // Pyodide + the bte shim + the JS converter end-to-end (reports 482 lineages
+  // proposed, matching golden mtb.4.8), rather than just loading a pre-computed
+  // tree into the viewer.
+  const useSampleDataServer = useCallback(async () => {
     setError(null);
     setLogs([]);
     addLog('Using sample data...');
@@ -285,6 +361,49 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       addLog(`Error: ${err.message}`, 'error');
     }
   }, [addLog]);
+
+  const useSampleDataClient = useCallback(async () => {
+    setError(null);
+    setLogs([]);
+    addLog('Fetching sample tree (MTB lineage 4.8)…');
+
+    try {
+      setStage(STAGES.LOADING);
+      setProgress(5);
+      const base = import.meta.env.BASE_URL || '/';
+      const url = new URL(`${base}mtb.4.8.pb.gz`, window.location.origin).href;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`Failed to fetch sample: HTTP ${resp.status}`);
+
+      // Decompress the .gz in the browser (same DecompressionStream used for pb export).
+      let pbBuffer;
+      if (typeof DecompressionStream !== 'undefined') {
+        const ds = new DecompressionStream('gzip');
+        const decompressed = resp.body.pipeThrough(ds);
+        pbBuffer = await new Response(decompressed).arrayBuffer();
+      } else {
+        // No DecompressionStream (very old browser) — fall back to the raw bytes,
+        // which only works if the asset is not actually gzipped.
+        pbBuffer = await resp.arrayBuffer();
+      }
+
+      const sampleFile = new File([pbBuffer], 'mtb.4.8.pb', { type: 'application/octet-stream' });
+      setFile(sampleFile);
+      addLog(`Sample loaded: mtb.4.8.pb (${(sampleFile.size / 1024 / 1024).toFixed(2)} MB) — running AutoLin…`, 'success');
+
+      // Run the identical client pipeline the upload path uses.
+      await runPipelineClient(sampleFile);
+    } catch (err) {
+      setStage(STAGES.ERROR);
+      setError(err.message);
+      addLog(`Error: ${err.message}`, 'error');
+    }
+  }, [addLog, runPipelineClient]);
+
+  // Dispatch sample-data load by build mode.
+  const useSampleData = useCallback(() => (
+    BACKENDLESS ? useSampleDataClient() : useSampleDataServer()
+  ), [useSampleDataClient, useSampleDataServer]);
 
   const isRunning = stage !== STAGES.IDLE && stage !== STAGES.COMPLETE && stage !== STAGES.ERROR;
   const canRun = file && !isRunning;
@@ -723,9 +842,6 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           onDragLeave={handleDragLeave}
           onClick={() => fileInputRef.current?.click()}
         >
-          {/* accept includes the trailing ".gz": many browsers match the file
-              picker against only the final extension, so ".pb.gz" alone leaves
-              .pb.gz files grayed out. handleFileChange re-validates the choice. */}
           <input
             ref={fileInputRef}
             type="file"
@@ -934,14 +1050,32 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           <div className="section-title">Download Autolin results</div>
           <div className="downloads-row">
             {downloads.map((dl, i) => (
-              <a
-                key={i}
-                className="btn btn-secondary download-btn"
-                href={`${BACKEND_URL}/download?path=${encodeURIComponent(dl.path)}`}
-                download={dl.name}
-              >
-                {dl.name.endsWith('.tsv') ? '.tsv' : dl.name.endsWith('.pb.gz') ? '.pb.gz' : '.jsonl.gz'}
-              </a>
+              BACKENDLESS ? (
+                <button
+                  key={i}
+                  className="btn btn-secondary download-btn"
+                  title={dl.label}
+                  onClick={() => {
+                    // Client-side download from the in-memory Blob — no backend.
+                    const url = URL.createObjectURL(dl.blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = dl.filename;
+                    document.body.appendChild(a); a.click();
+                    document.body.removeChild(a); URL.revokeObjectURL(url);
+                  }}
+                >
+                  {dl.filename.endsWith('.tsv') ? '.tsv' : dl.filename.endsWith('.pb') ? '.pb' : '.jsonl'}
+                </button>
+              ) : (
+                <a
+                  key={i}
+                  className="btn btn-secondary download-btn"
+                  href={`${BACKEND_URL}/download?path=${encodeURIComponent(dl.path)}`}
+                  download={dl.name}
+                >
+                  {dl.name.endsWith('.tsv') ? '.tsv' : dl.name.endsWith('.pb.gz') ? '.pb.gz' : '.jsonl.gz'}
+                </a>
+              )
             ))}
           </div>
           </>
