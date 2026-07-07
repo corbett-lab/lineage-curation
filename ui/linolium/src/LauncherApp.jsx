@@ -805,28 +805,26 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           </p>
         </header>
 
-        {/* File Drop Zone */}
+        {/* File Drop Zone. The <input> is a SIBLING of the clickable div, not a
+            child: when it was nested, the programmatic fileInputRef.click() bubbled
+            back into the div's onClick, and Chrome treated that nested click as
+            consuming the transient user activation — silently refusing to open the
+            native file picker. Keeping the input outside removes the re-entrancy. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pb,.pb.gz,.gz,application/gzip"
+          onChange={handleFileChange}
+          style={{ display: 'none' }}
+          disabled={isRunning}
+        />
         <div
           className={`drop-zone ${isDragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          onClick={(e) => {
-            // The file <input> lives inside this div, so a programmatic .click() on
-            // it bubbles back here and re-enters this handler, re-triggering the
-            // picker — which the browser then cancels, so it appears not to open.
-            // Only open the picker for clicks that didn't originate from the input.
-            if (e.target !== fileInputRef.current) fileInputRef.current?.click();
-          }}
+          onClick={() => fileInputRef.current?.click()}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pb,.pb.gz,.gz,application/gzip"
-            onChange={handleFileChange}
-            style={{ display: 'none' }}
-            disabled={isRunning}
-          />
           {file ? (
             <div className="file-info">
               <div>
