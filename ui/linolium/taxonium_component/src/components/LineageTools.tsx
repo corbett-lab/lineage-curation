@@ -514,8 +514,8 @@ const LineageTools = React.memo<LineageToolsProps>(({
       return;
     }
 
-    if (backend.type !== 'server' || !backend.backend_url) {
-      console.warn('Zoom functionality requires server backend');
+    if (typeof backend.singleSearch !== 'function') {
+      console.warn('Zoom functionality requires a backend with search support');
       return;
     }
 
@@ -529,24 +529,21 @@ const LineageTools = React.memo<LineageToolsProps>(({
         min_tips: 0
       };
 
-      // Use boundsForQueries if available, otherwise use default bounds
-      const minY = boundsForQueries?.min_y ?? -Infinity;
-      const maxY = boundsForQueries?.max_y ?? Infinity;
-      const minX = boundsForQueries?.min_x ?? -Infinity;
-      const maxX = boundsForQueries?.max_x ?? Infinity;
+      // Run the search through whichever backend is active. The server backend
+      // fetches /search internally; the local (WASM) backend runs the same
+      // filtering.singleSearch in its worker — both return { data: Node[] }.
+      const searchResult: any = await new Promise((resolve, reject) => {
+        try {
+          backend.singleSearch(
+            JSON.stringify(searchSpec),
+            boundsForQueries ?? null,
+            (res: any) => resolve(res)
+          );
+        } catch (err) {
+          reject(err);
+        }
+      });
 
-      const url = `${backend.backend_url}/search?json=${encodeURIComponent(JSON.stringify(JSON.stringify(searchSpec)))}&min_y=${minY}&max_y=${maxY}&min_x=${minX}&max_x=${maxX}`;
-
-      console.log('DEBUG: Zoom search spec:', searchSpec);
-      console.log('DEBUG: Zoom search URL:', url);
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const searchResult = await response.json();
       console.log('DEBUG: Search result:', searchResult);
 
       // Check for data in either overview or data field
