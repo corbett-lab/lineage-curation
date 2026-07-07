@@ -1,10 +1,10 @@
-name: Deploy browserize-static to Vercel
+name: Deploy to Vercel
 
-# Auto-publish: every push to the browserize-static branch triggers a
-# production deployment on Vercel. Manual runs available from the Actions tab.
+# Auto-publish: every push to main triggers a production deployment of the static
+# (backendless/WASM) build on Vercel. Manual runs available from the Actions tab.
 on:
   push:
-    branches: [browserize-static]
+    branches: [main]
   workflow_dispatch:
 
 # The Vercel project must be created once and its IDs stored as repo secrets:
