@@ -1,0 +1,46 @@
+name: Deploy browserize-static to Vercel
+
+# Auto-publish: every push to the browserize-static branch triggers a
+# production deployment on Vercel. Manual runs available from the Actions tab.
+on:
+  push:
+    branches: [browserize-static]
+  workflow_dispatch:
+
+# The Vercel project must be created once and its IDs stored as repo secrets:
+#   VERCEL_TOKEN       - account token (Vercel > Settings > Tokens)
+#   VERCEL_ORG_ID      - from ui/linolium/.vercel/project.json after `vercel link`
+#   VERCEL_PROJECT_ID  - from ui/linolium/.vercel/project.json after `vercel link`
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      # Pulls the Vercel project settings (root directory = ui/linolium,
+      # build command, output dir) so `vercel build` matches the dashboard.
+      - name: Pull Vercel project settings
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      # 12 GB heap: the taxonium_component build sets --max-old-space-size=8192;
+      # give Node headroom so the heavy Rollup step doesn't OOM on the runner.
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          NODE_OPTIONS: --max-old-space-size=12288
+
+      - name: Deploy prebuilt output to production
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

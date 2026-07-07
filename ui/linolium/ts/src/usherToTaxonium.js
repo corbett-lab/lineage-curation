@@ -128,18 +128,24 @@ export function toTaxonium(tree, cladeMap /* Map sampleId->cladeString */, colum
   const records = [header];
   for (const n of sorted) {
     const isLeaf = n.is_leaf();
-    const clade = isLeaf ? (cladeMap.get(n.id) ?? '') : '';
+    // Native usher_to_taxonium layout: leaves carry the sample's lineage in
+    // meta_annotation_1 (from the summary/cladeMap); annotated INTERNAL nodes
+    // carry the MAT annotation in clades.pango (empty meta_annotation_1). The
+    // lineage panel + editing logic read clades.pango on internal nodes.
+    const leafClade = isLeaf ? (cladeMap.get(n.id) ?? '') : '';
+    const internalClade = !isLeaf && n.annotations && n.annotations.length
+      ? (n.annotations.find(a => a) ?? '') : '';
     const rec = {
       name: n.id || '',
       x_dist: Math.round(n.x_dist * 1e5) / 1e5,
       y: n.y,
       mutations: n.mutations.map(m => mutIndex.get(m)),
       is_tip: isLeaf,
-      meta_annotation_1: clade,
+      meta_annotation_1: leafClade,
       parent_id: n.parent ? nodeToIndex.get(n.parent) : nodeToIndex.get(n),
       node_id: nodeToIndex.get(n),
       num_tips: numTips.get(n),
-      clades: { pango: '' },
+      clades: { pango: internalClade },
     };
     records.push(rec);
   }

@@ -78,11 +78,16 @@ export async function runClientPipeline(fileOrBuf, params = {}, hooks = {}) {
 
   // Build the in-memory SourceData the local backend expects
   const jsonlBuffer = new TextEncoder().encode(conv.jsonl).buffer;
+  // original autolin .pb bytes as an ArrayBuffer, for the client-side pb export
+  const pbBytes = result.pb instanceof Uint8Array
+    ? result.pb.buffer.slice(result.pb.byteOffset, result.pb.byteOffset + result.pb.byteLength)
+    : result.pb;
   const sourceData = {
     status: 'loaded',
     filename: 'autolin.jsonl',      // must contain 'jsonl' (worker gate); no 'gz' => plain text
     filetype: 'jsonl',
     data: jsonlBuffer,
+    pipelinePb: pbBytes,            // consumed by <Taxonium> → localBackend.setPipelinePb
   };
   onStage('done');
 

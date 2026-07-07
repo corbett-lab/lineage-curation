@@ -139,10 +139,52 @@ export interface ServerBackend extends BaseBackend {
   getNextstrainJsonUrl(nodeId: string | number, config: Config): string;
 }
 
+export interface LineageItem {
+  value: string;
+  count: number;
+  descendantLineages: number;
+  descendantLeaves: number;
+  parent?: string | null;
+}
+export interface LineagesResponse {
+  lineages: LineageItem[];
+  field: string;
+  totalNodes: number;
+  nodesWithLineage: number;
+  uniqueLineages: number;
+}
+export interface EditHistoryEntry {
+  id: number;
+  action: string;
+  lineageName?: string;
+  parentLineage?: string;
+  description: string;
+  timestamp: string;
+  affectedLineages: string[];
+}
+
+// Client-side lineage-editing surface (present on the local backend; the server
+// backend performs the equivalents over HTTP in Taxonium.tsx directly).
 export interface LocalBackend extends BaseBackend {
   type: "local";
   backend_url?: undefined;
   getNextstrainJsonUrl?(nodeId: string | number, config: Config): string;
+  getLineages(field?: string): Promise<LineagesResponse>;
+  mergeLineage(lineageName: string, field?: string): Promise<Record<string, unknown>>;
+  editLineageRoot(
+    lineageName: string,
+    rootNodeId: string | number,
+    field?: string
+  ): Promise<Record<string, unknown>>;
+  undoPreview(editId: number): Promise<{ targetId: number; wouldUndo: number[] }>;
+  undoEdit(editId?: number): Promise<Record<string, unknown>>;
+  getEditHistory(): Promise<EditHistoryEntry[]>;
+  buildExport(
+    format: string,
+    field?: string,
+    config?: Record<string, unknown>
+  ): Promise<{ format?: string; text?: string; bytes?: ArrayBuffer; error?: string }>;
+  setPipelinePb(pb: ArrayBuffer): Promise<{ ok: boolean }>;
 }
 
 export type Backend = ServerBackend | LocalBackend;
