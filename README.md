@@ -6,7 +6,13 @@ Automated phylogenetic lineage proposal and interactive curation.
 
 Linolium provides an environment for lineage discovery and curation on pathogen phylogenetic trees of virtually any size. It builds on the AutoLin algorithm for distance-based identification of clades and provides a UI for customizing the algorithm and curating results.
 
-## Quick Start
+Use the web app:
+
+➜ [linolium.vercel.app](https://linolium.vercel.app/)
+
+or run the Docker container locally for larger trees.
+
+## Quick Start (local)
 
 ```bash
 docker run -it --memory=8g -v "$PWD":/data -p 3000:3000 ghcr.io/corbett-lab/linolium
