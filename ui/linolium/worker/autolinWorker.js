@@ -27,8 +27,13 @@ async function fetchText(url) { const r = await fetch(url); if (!r.ok) throw new
 async function initPyodide() {
   if (pyodide) return pyodide;
   post({ type: 'stage', stage: 'loading' });
-  importScripts(PYODIDE_INDEX + 'pyodide.js');
-  pyodide = await self.loadPyodide({ indexURL: PYODIDE_INDEX });
+  // Load Pyodide via ESM dynamic import rather than importScripts(): Vite serves
+  // this worker as an ES module (type=module) in dev, where importScripts() is
+  // unavailable ("Module scripts don't support importScripts()"). Dynamic import of
+  // pyodide.mjs works in both module and classic workers. @vite-ignore: the URL is
+  // a runtime CDN path, not a bundle input.
+  const { loadPyodide } = await import(/* @vite-ignore */ PYODIDE_INDEX + 'pyodide.mjs');
+  pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX });
 
   // stage python assets into the virtual FS
   const FS = pyodide.FS;

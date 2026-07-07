@@ -134,9 +134,16 @@ function useLocalBackend(
     setStatusMessage(receivedData.data);
   };
   useEffect(() => {
+    if (!uploaded_data) return;
+    // Exclude pipelinePb before posting: it's an ArrayBuffer that gets *transferred*
+    // (and thus detached) separately via setPipelinePb, so structured-cloning it here
+    // throws "An ArrayBuffer is detached and could not be cloned" — reliably so under
+    // StrictMode's double effect-invoke. The upload handler never reads pipelinePb.
+    const { pipelinePb: _pipelinePb, ...data } = uploaded_data;
+    void _pipelinePb;
     worker.postMessage({
       type: "upload",
-      data: uploaded_data,
+      data,
     });
   }, [uploaded_data]);
 
