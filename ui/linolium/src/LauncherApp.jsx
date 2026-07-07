@@ -811,7 +811,13 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={(e) => {
+            // The file <input> lives inside this div, so a programmatic .click() on
+            // it bubbles back here and re-enters this handler, re-triggering the
+            // picker — which the browser then cancels, so it appears not to open.
+            // Only open the picker for clicks that didn't originate from the input.
+            if (e.target !== fileInputRef.current) fileInputRef.current?.click();
+          }}
         >
           <input
             ref={fileInputRef}
