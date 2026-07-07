@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { runClientPipeline } from './clientPipeline';
+import { BACKEND_URL, BACKENDLESS } from './config';
 
 /**
  * LauncherApp - A modern, sleek launcher UI for the lineage curation pipeline
@@ -122,7 +123,140 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
   // Run the pipeline. Accepts an optional File/Blob (used by the sample-data
   // button); when called as a click handler the event arg is ignored and the
   // selected `file` state is used instead.
-  const runPipeline = useCallback(async (fileArg) => {
+  const runPipelineServer = useCallback(async () => {
+    if (!file) {
+      addLog('No file selected', 'error');
+      return;
+    }
+
+    setError(null);
+    setLogs([]);
+    setProgress(0);
+
+    try {
+      // Stage 1: Upload file
+      setStage(STAGES.UPLOADING);
+      addLog('Uploading file to server...');
+      setProgress(10);
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadResponse = await fetch(`${BACKEND_URL}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+      }
+
+      const uploadResult = await uploadResponse.json();
+      addLog(`File uploaded: ${uploadResult.filename}`, 'success');
+      setProgress(25);
+
+      // Stage 2: Run propose_sublineages
+      setStage(STAGES.PROPOSING);
+      addLog('Running propose_sublineages.py...');
+      addLog(`Parameters: minsamples=${params.minsamples}, distinction=${params.distinction}, recursive=${params.recursive}`);
+
+      const proposeResponse = await fetch(`${BACKEND_URL}/run-autolin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inputFile: uploadResult.path,
+          params: {
+            minsamples: params.minsamples,
+            distinction: params.distinction,
+            recursive: params.recursive,
+            cutoff: params.cutoff,
+            floor: params.floor,
+            verbose: params.verbose,
+            clear: params.clear
+          }
+        })
+      });
+
+      if (!proposeResponse.ok) {
+        const errorData = await proposeResponse.json();
+        throw new Error(errorData.error || 'Pipeline failed');
+      }
+
+      // Stream logs from the response
+      const reader = proposeResponse.body.getReader();
+      const decoder = new TextDecoder();
+      let pipelineResult = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const text = decoder.decode(value);
+        const lines = text.split('\n').filter(line => line.trim());
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            
+            if (data.type === 'log') {
+              addLog(data.message);
+            } else if (data.type === 'stage') {
+              if (data.stage === 'proposing') {
+                setStage(STAGES.PROPOSING);
+                setProgress(40);
+              } else if (data.stage === 'converting') {
+                setStage(STAGES.CONVERTING);
+                setProgress(60);
+              } else if (data.stage === 'summary') {
+                setProgress(80);
+              }
+            } else if (data.type === 'complete') {
+              pipelineResult = data;
+            } else if (data.type === 'error') {
+              throw new Error(data.message);
+            }
+          } catch (parseError) {
+            // Not JSON, treat as plain log
+            if (line.trim()) {
+              addLog(line);
+            }
+          }
+        }
+      }
+
+      if (!pipelineResult) {
+        throw new Error('Pipeline did not return a result');
+      }
+
+      setProgress(90);
+      addLog(`Pipeline complete! Output: ${pipelineResult.outputFile}`, 'success');
+      setOutputFile(pipelineResult.outputFile);
+      if (pipelineResult.downloads) {
+        setDownloads(pipelineResult.downloads);
+        if (onDownloadsReady) onDownloadsReady(pipelineResult.downloads);
+      }
+
+      // Stage 3: Load viewer
+      setStage(STAGES.LOADING);
+      addLog('Starting Taxonium viewer...');
+      setProgress(95);
+
+      // Small delay to ensure backend is ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      setStage(STAGES.COMPLETE);
+      setProgress(100);
+      addLog('Ready to view!', 'success');
+
+    } catch (err) {
+      console.error('Pipeline error:', err);
+      setStage(STAGES.ERROR);
+      setError(err.message);
+      addLog(`Error: ${err.message}`, 'error');
+    }
+  }, [file, params, addLog]);
+
+  const runPipelineClient = useCallback(async (fileArg) => {
     const theFile = (fileArg instanceof File || fileArg instanceof Blob) ? fileArg : file;
     if (!theFile) {
       addLog('No file selected', 'error');
@@ -183,13 +317,18 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
     }
   }, [file, params, addLog, onDownloadsReady]);
 
+  // Dispatch: backendless (Pyodide, in-browser) vs server (Docker/local backend).
+  const runPipeline = useCallback((fileArg) => (
+    BACKENDLESS ? runPipelineClient(fileArg) : runPipelineServer()
+  ), [runPipelineClient, runPipelineServer]);
+
   // Launch Taxonium viewer — hand the in-memory jsonl (sourceData) to the viewer;
   // no backend path is passed, so Taxonium runs on its local worker.
   const handleLaunch = useCallback(() => {
     if (onLaunchTaxonium) {
-      onLaunchTaxonium(sourceData);
+      onLaunchTaxonium(BACKENDLESS ? sourceData : outputFile);
     }
-  }, [onLaunchTaxonium, sourceData]);
+  }, [onLaunchTaxonium, sourceData, outputFile]);
 
   // Use sample data — fetch the raw MTB lineage-4.8 protobuf (shipped gzipped as
   // public/mtb.4.8.pb.gz), decompress it in the browser, and run the FULL AutoLin
@@ -197,7 +336,33 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
   // Pyodide + the bte shim + the JS converter end-to-end (reports 482 lineages
   // proposed, matching golden mtb.4.8), rather than just loading a pre-computed
   // tree into the viewer.
-  const useSampleData = useCallback(async () => {
+  const useSampleDataServer = useCallback(async () => {
+    setError(null);
+    setLogs([]);
+    addLog('Using sample data...');
+    
+    try {
+      setStage(STAGES.LOADING);
+      setProgress(50);
+      
+      // Check if backend is ready with sample data
+      const response = await fetch(`${BACKEND_URL}/config`);
+      if (response.ok) {
+        setProgress(100);
+        setStage(STAGES.COMPLETE);
+        addLog('Sample data loaded!', 'success');
+        setOutputFile('sample');
+      } else {
+        throw new Error('Backend not ready');
+      }
+    } catch (err) {
+      setStage(STAGES.ERROR);
+      setError(err.message);
+      addLog(`Error: ${err.message}`, 'error');
+    }
+  }, [addLog]);
+
+  const useSampleDataClient = useCallback(async () => {
     setError(null);
     setLogs([]);
     addLog('Fetching sample tree (MTB lineage 4.8)…');
@@ -227,13 +392,18 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       addLog(`Sample loaded: mtb.4.8.pb (${(sampleFile.size / 1024 / 1024).toFixed(2)} MB) — running AutoLin…`, 'success');
 
       // Run the identical client pipeline the upload path uses.
-      await runPipeline(sampleFile);
+      await runPipelineClient(sampleFile);
     } catch (err) {
       setStage(STAGES.ERROR);
       setError(err.message);
       addLog(`Error: ${err.message}`, 'error');
     }
-  }, [addLog, runPipeline]);
+  }, [addLog, runPipelineClient]);
+
+  // Dispatch sample-data load by build mode.
+  const useSampleData = useCallback(() => (
+    BACKENDLESS ? useSampleDataClient() : useSampleDataServer()
+  ), [useSampleDataClient, useSampleDataServer]);
 
   const isRunning = stage !== STAGES.IDLE && stage !== STAGES.COMPLETE && stage !== STAGES.ERROR;
   const canRun = file && !isRunning;
@@ -675,7 +845,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pb,.pb.gz"
+            accept=".pb,.pb.gz,.gz,application/gzip"
             onChange={handleFileChange}
             style={{ display: 'none' }}
             disabled={isRunning}
@@ -880,21 +1050,32 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           <div className="section-title">Download Autolin results</div>
           <div className="downloads-row">
             {downloads.map((dl, i) => (
-              <button
-                key={i}
-                className="btn btn-secondary download-btn"
-                title={dl.label}
-                onClick={() => {
-                  // Client-side download from the in-memory Blob — no backend.
-                  const url = URL.createObjectURL(dl.blob);
-                  const a = document.createElement('a');
-                  a.href = url; a.download = dl.filename;
-                  document.body.appendChild(a); a.click();
-                  document.body.removeChild(a); URL.revokeObjectURL(url);
-                }}
-              >
-                {dl.filename.endsWith('.tsv') ? '.tsv' : dl.filename.endsWith('.pb') ? '.pb' : '.jsonl'}
-              </button>
+              BACKENDLESS ? (
+                <button
+                  key={i}
+                  className="btn btn-secondary download-btn"
+                  title={dl.label}
+                  onClick={() => {
+                    // Client-side download from the in-memory Blob — no backend.
+                    const url = URL.createObjectURL(dl.blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = dl.filename;
+                    document.body.appendChild(a); a.click();
+                    document.body.removeChild(a); URL.revokeObjectURL(url);
+                  }}
+                >
+                  {dl.filename.endsWith('.tsv') ? '.tsv' : dl.filename.endsWith('.pb') ? '.pb' : '.jsonl'}
+                </button>
+              ) : (
+                <a
+                  key={i}
+                  className="btn btn-secondary download-btn"
+                  href={`${BACKEND_URL}/download?path=${encodeURIComponent(dl.path)}`}
+                  download={dl.name}
+                >
+                  {dl.name.endsWith('.tsv') ? '.tsv' : dl.name.endsWith('.pb.gz') ? '.pb.gz' : '.jsonl.gz'}
+                </a>
+              )
             ))}
           </div>
           </>

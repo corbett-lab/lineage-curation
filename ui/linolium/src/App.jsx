@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import LauncherApp from './LauncherApp';
+import { BACKEND_URL, BACKENDLESS } from './config';
 
 const Taxonium = lazy(() => import('taxonium-component'));
 
@@ -77,27 +78,88 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('')
   const [outputFile, setOutputFile] = useState(null)
-  const [sourceData, setSourceData] = useState(null)   // in-memory Taxonium jsonl (backendless)
+  const [sourceData, setSourceData] = useState(null)   // in-memory Taxonium jsonl (backendless mode)
   const [pipelineDownloads, setPipelineDownloads] = useState([])
 
-  // Handle launching Taxonium from the launcher. The launcher now hands us the
-  // in-memory `sourceData` (a Taxonium SourceData object) produced entirely in the
-  // browser — there is no server to reload data into.
-  const handleLaunchTaxonium = async (launchSourceData) => {
+  // Check if backend has loaded data (not just running) — server mode only.
+  const checkDataReady = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/config`)
+      if (response.ok) {
+        const config = await response.json()
+        if (config.num_nodes && config.num_nodes > 0) {
+          return true
+        }
+      }
+      return false
+    } catch (error) {
+      return false
+    }
+  }
+
+  // Handle launching Taxonium from the launcher.
+  //
+  //  - Backendless mode: the launcher hands us an in-memory `sourceData`
+  //    (a Taxonium SourceData object) produced entirely in the browser;
+  //    there is no server to reload data into.
+  //  - Server mode: the launcher hands us a file path; we POST /reload-data
+  //    to the backend and then switch to the viewer with backendUrl.
+  const handleLaunchTaxonium = async (arg) => {
+    // Prevent multiple launches
     if (isLoading) return;
+
     setIsLoading(true)
     setBackendError(null)
-    setLoadingMessage('Preparing viewer…')
 
-    if (!launchSourceData) {
-      setBackendError('No tree data was produced by the pipeline.')
+    if (BACKENDLESS) {
+      setLoadingMessage('Preparing viewer…')
+      if (!arg) {
+        setBackendError('No tree data was produced by the pipeline.')
+        setIsLoading(false)
+        return
+      }
+      setSourceData(arg)
+      setOutputFile('client')
+      setBackendReady(true)
       setIsLoading(false)
+      setView('taxonium')
       return
     }
-    setSourceData(launchSourceData)
-    setOutputFile('client')
 
-    // Data lives in memory; hand it to the local-backend viewer.
+    // ---- Server mode (Docker / local) ------------------------------------
+    const file = arg
+    setOutputFile(file)
+    setLoadingMessage('Starting data reload...')
+
+    // If we have a new file (not sample mode), reload and wait
+    if (file && file !== 'sample') {
+      try {
+        setLoadingMessage('Loading tree data...')
+
+        const response = await fetch(`${BACKEND_URL}/reload-data`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataFile: file })
+        })
+
+        if (!response.ok) {
+          const error = await response.json()
+          throw new Error(error.error || 'Failed to reload data')
+        }
+
+        const result = await response.json()
+        console.log('Data reloaded:', result.nodes, 'nodes')
+        setLoadingMessage(`Loaded ${result.nodes?.toLocaleString() || ''} nodes`)
+
+      } catch (error) {
+        console.error('Failed to reload data:', error)
+        setBackendError(error.message)
+        setIsLoading(false)
+        return
+      }
+    }
+
+    // Data is ready, switch to Taxonium
     setBackendReady(true)
     setIsLoading(false)
     setView('taxonium')
@@ -116,19 +178,19 @@ function App() {
   if (view === 'launcher' && !isLoading) {
     return <LauncherApp onLaunchTaxonium={handleLaunchTaxonium} onDownloadsReady={setPipelineDownloads} />
   }
-  
+
   // Show loading state with nice UI
   if (isLoading) {
     return <LoadingScreen message={loadingMessage} />
   }
-  
+
   // Show error if backend failed
   if (backendError && !backendReady) {
     return (
       <div className="error-container">
-        <h2>Backend Server Error</h2>
+        <h2>{BACKENDLESS ? 'Pipeline Error' : 'Backend Server Error'}</h2>
         <p>{backendError}</p>
-        <p>Make sure the backend server is running and reachable.</p>
+        {!BACKENDLESS && <p>Make sure the backend server is running and reachable.</p>}
         <button onClick={handleBackToLauncher} style={{ marginTop: '20px', padding: '10px 20px' }}>
           Back to Launcher
         </button>
@@ -167,11 +229,19 @@ function App() {
       </div>
       <div className="h-full" style={{ flex: 1, minHeight: 0 }}>
         <Suspense fallback={<LoadingScreen message="Loading viewer components..." />}>
-          <Taxonium
-            sourceData={sourceData}
-            sidePanelHiddenByDefault={false}
-            pipelineDownloads={pipelineDownloads}
-          />
+          {BACKENDLESS ? (
+            <Taxonium
+              sourceData={sourceData}
+              sidePanelHiddenByDefault={false}
+              pipelineDownloads={pipelineDownloads}
+            />
+          ) : (
+            <Taxonium
+              backendUrl={BACKEND_URL}
+              sidePanelHiddenByDefault={false}
+              pipelineDownloads={pipelineDownloads}
+            />
+          )}
         </Suspense>
       </div>
     </div>
