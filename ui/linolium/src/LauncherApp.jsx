@@ -123,8 +123,9 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
   // Run the pipeline. Accepts an optional File/Blob (used by the sample-data
   // button); when called as a click handler the event arg is ignored and the
   // selected `file` state is used instead.
-  const runPipelineServer = useCallback(async () => {
-    if (!file) {
+  const runPipelineServer = useCallback(async (fileArg) => {
+    const theFile = (fileArg instanceof File || fileArg instanceof Blob) ? fileArg : file;
+    if (!theFile) {
       addLog('No file selected', 'error');
       return;
     }
@@ -140,7 +141,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       setProgress(10);
 
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', theFile);
 
       const uploadResponse = await fetch(`${BACKEND_URL}/upload`, {
         method: 'POST',
@@ -319,7 +320,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
 
   // Dispatch: backendless (Pyodide, in-browser) vs server (Docker/local backend).
   const runPipeline = useCallback((fileArg) => (
-    BACKENDLESS ? runPipelineClient(fileArg) : runPipelineServer()
+    BACKENDLESS ? runPipelineClient(fileArg) : runPipelineServer(fileArg)
   ), [runPipelineClient, runPipelineServer]);
 
   // Launch Taxonium viewer — hand the in-memory jsonl (sourceData) to the viewer;
@@ -336,33 +337,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
   // Pyodide + the bte shim + the JS converter end-to-end (reports 482 lineages
   // proposed, matching golden mtb.4.8), rather than just loading a pre-computed
   // tree into the viewer.
-  const useSampleDataServer = useCallback(async () => {
-    setError(null);
-    setLogs([]);
-    addLog('Using sample data...');
-    
-    try {
-      setStage(STAGES.LOADING);
-      setProgress(50);
-      
-      // Check if backend is ready with sample data
-      const response = await fetch(`${BACKEND_URL}/config`);
-      if (response.ok) {
-        setProgress(100);
-        setStage(STAGES.COMPLETE);
-        addLog('Sample data loaded!', 'success');
-        setOutputFile('sample');
-      } else {
-        throw new Error('Backend not ready');
-      }
-    } catch (err) {
-      setStage(STAGES.ERROR);
-      setError(err.message);
-      addLog(`Error: ${err.message}`, 'error');
-    }
-  }, [addLog]);
-
-  const useSampleDataClient = useCallback(async () => {
+  const useSampleData = useCallback(async () => {
     setError(null);
     setLogs([]);
     addLog('Fetching sample tree (MTB lineage 4.8)…');
@@ -375,35 +350,31 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Failed to fetch sample: HTTP ${resp.status}`);
 
-      // Decompress the .gz in the browser (same DecompressionStream used for pb export).
-      let pbBuffer;
-      if (typeof DecompressionStream !== 'undefined') {
-        const ds = new DecompressionStream('gzip');
-        const decompressed = resp.body.pipeThrough(ds);
-        pbBuffer = await new Response(decompressed).arrayBuffer();
-      } else {
-        // No DecompressionStream (very old browser) — fall back to the raw bytes,
-        // which only works if the asset is not actually gzipped.
-        pbBuffer = await resp.arrayBuffer();
+      // Read the body, then gunzip ONLY if it's still compressed. Many hosts
+      // (vite dev, most static/CDN hosts) serve the .gz with `Content-Encoding:
+      // gzip`, so the browser has already inflated it and we get raw protobuf.
+      // Decompressing again would double-inflate and corrupt the data, so we key
+      // on the gzip magic bytes (0x1f 0x8b) and only inflate when they're present.
+      let bytes = new Uint8Array(await resp.arrayBuffer());
+      if (bytes.length > 1 && bytes[0] === 0x1f && bytes[1] === 0x8b &&
+          typeof DecompressionStream !== 'undefined') {
+        const inflated = new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'));
+        bytes = new Uint8Array(await new Response(inflated).arrayBuffer());
       }
 
-      const sampleFile = new File([pbBuffer], 'mtb.4.8.pb', { type: 'application/octet-stream' });
+      const sampleFile = new File([bytes], 'mtb.4.8.pb', { type: 'application/octet-stream' });
       setFile(sampleFile);
       addLog(`Sample loaded: mtb.4.8.pb (${(sampleFile.size / 1024 / 1024).toFixed(2)} MB) — running AutoLin…`, 'success');
 
-      // Run the identical client pipeline the upload path uses.
-      await runPipelineClient(sampleFile);
+      // Run the SAME pipeline the upload path uses — AutoLin in the browser
+      // (backendless) or on the backend (server). Identical behavior either way.
+      await runPipeline(sampleFile);
     } catch (err) {
       setStage(STAGES.ERROR);
       setError(err.message);
       addLog(`Error: ${err.message}`, 'error');
     }
-  }, [addLog, runPipelineClient]);
-
-  // Dispatch sample-data load by build mode.
-  const useSampleData = useCallback(() => (
-    BACKENDLESS ? useSampleDataClient() : useSampleDataServer()
-  ), [useSampleDataClient, useSampleDataServer]);
+  }, [addLog, runPipeline]);
 
   const isRunning = stage !== STAGES.IDLE && stage !== STAGES.COMPLETE && stage !== STAGES.ERROR;
   const canRun = file && !isRunning;
