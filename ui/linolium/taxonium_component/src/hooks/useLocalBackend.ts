@@ -83,10 +83,36 @@ worker.onmessage = (event: MessageEvent<LocalBackendMessage>) => {
     case "nextstrain":
       onNextStrainReceipt(data.data);
       break;
+    case "lineages":
+    case "merge-lineage":
+    case "edit-lineage-root":
+    case "undo-preview":
+    case "undo-edit":
+    case "edit-history":
+    case "set-pipeline-pb":
+    case "export": {
+      const rid = (data as { requestId?: number }).requestId;
+      if (rid !== undefined && editResolvers[rid]) {
+        editResolvers[rid]((data as { data: unknown }).data);
+        delete editResolvers[rid];
+      }
+      break;
+    }
     default:
       break;
   }
 };
+
+// requestId-keyed promise resolvers for the editing round-trips
+let editReqCounter = 0;
+const editResolvers: Record<number, (data: unknown) => void> = {};
+function editRequest(payload: Record<string, unknown>): Promise<unknown> {
+  const requestId = ++editReqCounter;
+  return new Promise((resolve) => {
+    editResolvers[requestId] = resolve;
+    worker.postMessage({ ...payload, requestId });
+  });
+}
 
 function useLocalBackend(
   uploaded_data: Record<string, unknown> | null
@@ -220,6 +246,47 @@ function useLocalBackend(
     });
   }, []);
 
+  // ---- lineage-editing methods (round-trip to the worker via editRequest) ----
+  const getLineages = useCallback(
+    (field = "meta_annotation_1") => editRequest({ type: "lineages", field }),
+    []
+  );
+  const mergeLineage = useCallback(
+    (lineageName: string, field = "meta_annotation_1") =>
+      editRequest({ type: "merge-lineage", lineageName, field }),
+    []
+  );
+  const editLineageRoot = useCallback(
+    (lineageName: string, rootNodeId: string | number, field = "meta_annotation_1") =>
+      editRequest({ type: "edit-lineage-root", lineageName, rootNodeId, field }),
+    []
+  );
+  const undoPreview = useCallback(
+    (editId: number) => editRequest({ type: "undo-preview", editId }),
+    []
+  );
+  const undoEdit = useCallback(
+    (editId?: number) => editRequest({ type: "undo-edit", editId }),
+    []
+  );
+  const getEditHistory = useCallback(
+    () => editRequest({ type: "edit-history" }),
+    []
+  );
+  const buildExport = useCallback(
+    (format: string, field = "meta_annotation_1", config: Record<string, unknown> = {}) =>
+      editRequest({ type: "export", format, field, config }),
+    []
+  );
+  const setPipelinePb = useCallback((pb: ArrayBuffer) => {
+    // transfer the buffer to the worker zero-copy
+    const requestId = ++editReqCounter;
+    return new Promise((resolve) => {
+      editResolvers[requestId] = resolve;
+      worker.postMessage({ type: "set-pipeline-pb", pb, requestId }, [pb]);
+    });
+  }, []);
+
   return useMemo(() => {
     return {
       queryNodes,
@@ -230,6 +297,14 @@ function useLocalBackend(
       setStatusMessage,
       getTipAtts,
       getNextstrainJson,
+      getLineages,
+      mergeLineage,
+      editLineageRoot,
+      undoPreview,
+      undoEdit,
+      getEditHistory,
+      buildExport,
+      setPipelinePb,
       type: "local",
     };
   }, [
@@ -241,6 +316,14 @@ function useLocalBackend(
     setStatusMessage,
     getTipAtts,
     getNextstrainJson,
+    getLineages,
+    mergeLineage,
+    editLineageRoot,
+    undoPreview,
+    undoEdit,
+    getEditHistory,
+    buildExport,
+    setPipelinePb,
   ]);
 }
 

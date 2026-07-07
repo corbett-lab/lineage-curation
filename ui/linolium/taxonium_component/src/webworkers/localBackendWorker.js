@@ -10,8 +10,14 @@ import { ReadableWebToNodeStream } from "readable-web-to-node-stream";
 import { parser } from "stream-json";
 import { streamValues } from "stream-json/streamers/StreamValues";
 import { Buffer } from "buffer";
+import * as lineageEditing from "./lineageEditing.js";
+import { MATree, saveMatPb } from "./matpb.js";
 
 postMessage({ data: "Worker starting" });
+
+// Original pipeline .pb bytes (set by the launcher after run-autolin). Needed
+// only for the /export/pb equivalent — the AutoLin worker produces these.
+let pipelinePbBytes = null;
 
 const the_cache = {};
 
@@ -70,19 +76,12 @@ export const queryNodes = async (boundsForQueries) => {
     y_positions,
   } = processedUploadedData;
 
-  let min_y = isNaN(boundsForQueries.min_y)
-    ? overallMinY
-    : boundsForQueries.min_y;
-  let max_y = isNaN(boundsForQueries.max_y)
-    ? overallMaxY
-    : boundsForQueries.max_y;
-
-  let min_x = isNaN(boundsForQueries.min_x)
-    ? overallMinX
-    : boundsForQueries.min_x;
-  let max_x = isNaN(boundsForQueries.max_x)
-    ? overallMaxX
-    : boundsForQueries.max_x;
+  // A refresh after an edit can post null/empty bounds — treat as "whole tree".
+  const b = boundsForQueries || {};
+  let min_y = isNaN(b.min_y) ? overallMinY : b.min_y;
+  let max_y = isNaN(b.max_y) ? overallMaxY : b.max_y;
+  let min_x = isNaN(b.min_x) ? overallMinX : b.min_x;
+  let max_x = isNaN(b.max_x) ? overallMaxX : b.max_x;
   if (min_y < overallMinY) {
     min_y = overallMinY;
   }
@@ -99,7 +98,7 @@ export const queryNodes = async (boundsForQueries) => {
       max_y,
       min_x,
       max_x,
-      boundsForQueries.xType
+      b.xType
     ),
   };
 
@@ -256,6 +255,75 @@ onmessage = async (event) => {
         processedUploadedData.mutations
       );
       postMessage({ type: "nextstrain", data: result });
+    }
+
+    // ---- lineage-editing handlers (client-side port of the backend edit
+    // endpoints; all operate in-memory on processedUploadedData.nodes) ----
+    if (data.type === "lineages") {
+      await waitForProcessedData();
+      const field = data.field || "meta_annotation_1";
+      lineageEditing.captureOriginalLineages(processedUploadedData, field);
+      const result = lineageEditing.getLineages(processedUploadedData, field);
+      postMessage({ type: "lineages", requestId: data.requestId, data: result });
+    }
+    if (data.type === "merge-lineage") {
+      await waitForProcessedData();
+      const result = lineageEditing.mergeLineage(
+        processedUploadedData,
+        data.lineageName,
+        data.field || "meta_annotation_1"
+      );
+      postMessage({ type: "merge-lineage", requestId: data.requestId, data: result });
+    }
+    if (data.type === "edit-lineage-root") {
+      await waitForProcessedData();
+      const result = lineageEditing.editLineageRoot(
+        processedUploadedData,
+        data.lineageName,
+        data.rootNodeId,
+        data.field || "meta_annotation_1"
+      );
+      postMessage({ type: "edit-lineage-root", requestId: data.requestId, data: result });
+    }
+    if (data.type === "undo-preview") {
+      const result = lineageEditing.undoPreview(data.editId);
+      postMessage({ type: "undo-preview", requestId: data.requestId, data: result });
+    }
+    if (data.type === "undo-edit") {
+      await waitForProcessedData();
+      const result = lineageEditing.undoEdit(processedUploadedData, data.editId);
+      postMessage({ type: "undo-edit", requestId: data.requestId, data: result });
+    }
+    if (data.type === "edit-history") {
+      const result = lineageEditing.getEditHistory();
+      postMessage({ type: "edit-history", requestId: data.requestId, data: result });
+    }
+    if (data.type === "set-pipeline-pb") {
+      // launcher hands us the original autolin .pb bytes for the pb export
+      pipelinePbBytes = data.pb ? new Uint8Array(data.pb) : null;
+      postMessage({ type: "set-pipeline-pb", requestId: data.requestId, data: { ok: !!pipelinePbBytes } });
+    }
+    if (data.type === "export") {
+      await waitForProcessedData();
+      const field = data.field || "meta_annotation_1";
+      if (data.format === "pb") {
+        // pb export: apply current tip->lineage labels at each lineage's MRCA on
+        // the original .pb tree, then re-serialize (buildPbExport). Returns bytes.
+        if (!pipelinePbBytes) {
+          postMessage({ type: "export", requestId: data.requestId, data: { error: "No pipeline .pb available for export" } });
+        } else {
+          const bytes = lineageEditing.buildPbExport(
+            processedUploadedData, MATree, saveMatPb, pipelinePbBytes, field
+          );
+          // transfer the ArrayBuffer back zero-copy
+          postMessage({ type: "export", requestId: data.requestId, data: { format: "pb", bytes: bytes.buffer } }, [bytes.buffer]);
+        }
+      } else {
+        const result = lineageEditing.buildExport(
+          processedUploadedData, data.format, field, data.config || {}
+        );
+        postMessage({ type: "export", requestId: data.requestId, data: result });
+      }
     }
   }
 };

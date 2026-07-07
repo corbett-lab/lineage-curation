@@ -63,31 +63,34 @@ type EditHistoryEntry = {
   affectedLineages?: string[];
 };
 
-const EditHistoryPanel = ({ editHistory, onUndo, backendUrl }: {
+const EditHistoryPanel = ({ editHistory, onUndo, backendUrl, undoPreview }: {
   editHistory: EditHistoryEntry[];
   onUndo?: (editId?: number) => void;
   backendUrl?: string;
+  undoPreview?: (editId: number) => Promise<{ wouldUndo: number[] }>;
 }) => {
   const [hoveredUndoId, setHoveredUndoId] = useState<number | null>(null);
   const [conflictSet, setConflictSet] = useState<Set<number>>(new Set());
 
-  // Fetch conflict preview from backend when hovering an undo button
+  // Preview which edits would be undone (transitive conflict closure) when
+  // hovering an undo button. Local backend computes it in-worker; server via HTTP.
   useEffect(() => {
-    if (hoveredUndoId === null || !backendUrl) {
-      setConflictSet(new Set());
-      return;
-    }
+    if (hoveredUndoId === null) { setConflictSet(new Set()); return; }
     let cancelled = false;
-    fetch(`${backendUrl}/undo-preview/${hoveredUndoId}`)
-      .then(r => r.json())
-      .then(data => {
-        if (!cancelled) setConflictSet(new Set(data.wouldUndo));
-      })
-      .catch(() => {
-        if (!cancelled) setConflictSet(new Set([hoveredUndoId]));
-      });
+    if (undoPreview) {
+      undoPreview(hoveredUndoId)
+        .then(data => { if (!cancelled) setConflictSet(new Set(data.wouldUndo)); })
+        .catch(() => { if (!cancelled) setConflictSet(new Set([hoveredUndoId])); });
+    } else if (backendUrl) {
+      fetch(`${backendUrl}/undo-preview/${hoveredUndoId}`)
+        .then(r => r.json())
+        .then(data => { if (!cancelled) setConflictSet(new Set(data.wouldUndo)); })
+        .catch(() => { if (!cancelled) setConflictSet(new Set([hoveredUndoId])); });
+    } else {
+      setConflictSet(new Set());
+    }
     return () => { cancelled = true; };
-  }, [hoveredUndoId, backendUrl]);
+  }, [hoveredUndoId, backendUrl, undoPreview]);
 
   const wouldBeUndone = (id: number) => conflictSet.has(id);
 
@@ -218,6 +221,12 @@ const arePropsEqual = (prevProps: LineageToolsProps, nextProps: LineageToolsProp
 
   if (prevProps.pipelineDownloads !== nextProps.pipelineDownloads) return false;
   if (prevProps.editHistory !== nextProps.editHistory) return false;
+
+  // Re-render when the hovered row changes — the per-row hover action buttons
+  // (merge / edit-root / zoom) are gated on hoveredKey === node.name, so without
+  // this the buttons never appear on hover. Same for editingLineage (button state).
+  if (prevProps.hoveredKey !== nextProps.hoveredKey) return false;
+  if (prevProps.editingLineage !== nextProps.editingLineage) return false;
 
   // If we get here, props are considered equal
   return true;
@@ -389,14 +398,30 @@ const LineageTools = React.memo<LineageToolsProps>(({
     }
   }, [onEditLineage]);
 
+  // Trigger a browser download from an in-memory string.
+  const downloadText = (text: string, filename: string, mime: string) => {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Handle export JSONL
   const handleExportJsonl = useCallback(async () => {
-    if (!backend || backend.type !== 'server' || !backend.backend_url) {
-      toast.error('Export requires server backend');
-      return;
-    }
-
+    if (!backend) { toast.error('No backend available for export'); return; }
     try {
+      if (backend.type === 'local') {
+        const res = await backend.buildExport('jsonl');
+        if (res.error || !res.text) throw new Error(res.error || 'empty export');
+        downloadText(res.text, 'exported_tree.jsonl', 'application/jsonl');
+        toast.success('JSONL exported');
+        return;
+      }
       const url = `${backend.backend_url}/export/jsonl`;
       const link = document.createElement('a');
       link.href = url;
@@ -404,7 +429,6 @@ const LineageTools = React.memo<LineageToolsProps>(({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
       toast.success('JSONL export started');
     } catch (error) {
       console.error('Error exporting JSONL:', error);
@@ -414,12 +438,34 @@ const LineageTools = React.memo<LineageToolsProps>(({
 
   // Handle export protobuf
   const handleExportPb = useCallback(async () => {
-    if (!backend || backend.type !== 'server' || !backend.backend_url) {
-      toast.error('Export requires server backend');
-      return;
-    }
-
+    if (!backend) { toast.error('No backend available for export'); return; }
     try {
+      if (backend.type === 'local') {
+        toast('Generating .pb.gz ...');
+        const res = await backend.buildExport('pb');
+        if (res.error || !res.bytes) throw new Error(res.error || 'pb export unavailable');
+        // gzip in-browser via CompressionStream, fall back to raw .pb if absent
+        const raw = new Uint8Array(res.bytes);
+        let outBlob: Blob;
+        let filename = 'exported_tree.pb.gz';
+        if (typeof (globalThis as any).CompressionStream !== 'undefined') {
+          const cs = new (globalThis as any).CompressionStream('gzip');
+          const writer = cs.writable.getWriter();
+          writer.write(raw); writer.close();
+          const gzBuf = await new Response(cs.readable).arrayBuffer();
+          outBlob = new Blob([gzBuf], { type: 'application/gzip' });
+        } else {
+          outBlob = new Blob([raw], { type: 'application/octet-stream' });
+          filename = 'exported_tree.pb';
+        }
+        const url = URL.createObjectURL(outBlob);
+        const link = document.createElement('a');
+        link.href = url; link.download = filename;
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        toast.success('Protobuf exported');
+        return;
+      }
       toast('Generating .pb.gz (this may take a moment)...');
       const url = `${backend.backend_url}/export/pb`;
       const link = document.createElement('a');
@@ -436,12 +482,15 @@ const LineageTools = React.memo<LineageToolsProps>(({
 
   // Handle export metadata TSV
   const handleExportMetadata = useCallback(async () => {
-    if (!backend || backend.type !== 'server' || !backend.backend_url) {
-      toast.error('Export requires server backend');
-      return;
-    }
-
+    if (!backend) { toast.error('No backend available for export'); return; }
     try {
+      if (backend.type === 'local') {
+        const res = await backend.buildExport('metadata');
+        if (res.error || !res.text) throw new Error(res.error || 'empty export');
+        downloadText(res.text, 'exported_metadata.tsv', 'text/tab-separated-values');
+        toast.success('Metadata TSV exported');
+        return;
+      }
       const url = `${backend.backend_url}/export/metadata`;
       const link = document.createElement('a');
       link.href = url;
@@ -449,7 +498,6 @@ const LineageTools = React.memo<LineageToolsProps>(({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
       toast.success('Metadata TSV export started');
     } catch (error) {
       console.error('Error exporting metadata:', error);
@@ -466,8 +514,8 @@ const LineageTools = React.memo<LineageToolsProps>(({
       return;
     }
 
-    if (backend.type !== 'server' || !backend.backend_url) {
-      console.warn('Zoom functionality requires server backend');
+    if (typeof backend.singleSearch !== 'function') {
+      console.warn('Zoom functionality requires a backend with search support');
       return;
     }
 
@@ -481,24 +529,21 @@ const LineageTools = React.memo<LineageToolsProps>(({
         min_tips: 0
       };
 
-      // Use boundsForQueries if available, otherwise use default bounds
-      const minY = boundsForQueries?.min_y ?? -Infinity;
-      const maxY = boundsForQueries?.max_y ?? Infinity;
-      const minX = boundsForQueries?.min_x ?? -Infinity;
-      const maxX = boundsForQueries?.max_x ?? Infinity;
+      // Run the search through whichever backend is active. The server backend
+      // fetches /search internally; the local (WASM) backend runs the same
+      // filtering.singleSearch in its worker — both return { data: Node[] }.
+      const searchResult: any = await new Promise((resolve, reject) => {
+        try {
+          backend.singleSearch(
+            JSON.stringify(searchSpec),
+            boundsForQueries ?? null,
+            (res: any) => resolve(res)
+          );
+        } catch (err) {
+          reject(err);
+        }
+      });
 
-      const url = `${backend.backend_url}/search?json=${encodeURIComponent(JSON.stringify(JSON.stringify(searchSpec)))}&min_y=${minY}&max_y=${maxY}&min_x=${minX}&max_x=${maxX}`;
-
-      console.log('DEBUG: Zoom search spec:', searchSpec);
-      console.log('DEBUG: Zoom search URL:', url);
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const searchResult = await response.json();
       console.log('DEBUG: Search result:', searchResult);
 
       // Check for data in either overview or data field
@@ -959,13 +1004,21 @@ const LineageTools = React.memo<LineageToolsProps>(({
           {pipelineDownloads && pipelineDownloads.length > 0 && (
             <div className="flex items-center gap-1 text-gray-500">
               <span className="text-gray-400" style={{ width: '42px', flexShrink: 0 }}>Original</span>
-              {['.jsonl.gz', '.pb.gz', '.tsv'].map(ext => {
-                const dl = pipelineDownloads.find(d => d.name.endsWith(ext));
-                return dl ? (
-                  <a key={ext} href={`${backend?.backend_url ?? ''}/download?path=${encodeURIComponent(dl.path)}`} download={dl.name} className="flex-1 text-center text-gray-500 hover:text-gray-700 underline" style={{ fontSize: '10px' }}>{ext}</a>
-                ) : (
-                  <span key={ext} className="flex-1 text-center text-gray-300" style={{ fontSize: '10px' }}>{ext}</span>
-                );
+              {['.jsonl.gz', '.pb.gz', '.tsv', '.jsonl', '.pb'].filter((e, i, a) => ['.jsonl.gz','.pb.gz','.tsv'].includes(e)).map(ext => {
+                // Match by name or filename; tolerate missing fields (backendless in-memory downloads).
+                const nameOf = (d: any) => (d && (d.name || d.filename)) || '';
+                const dl = pipelineDownloads.find((d: any) => {
+                  const n = nameOf(d);
+                  if (ext === '.jsonl.gz') return n.endsWith('.jsonl.gz') || n.endsWith('.jsonl');
+                  if (ext === '.pb.gz') return n.endsWith('.pb.gz') || n.endsWith('.pb');
+                  return n.endsWith(ext);
+                });
+                if (!dl) return <span key={ext} className="flex-1 text-center text-gray-300" style={{ fontSize: '10px' }}>{ext}</span>;
+                // Backendless: download from an in-memory Blob if present; else fall back to the backend path.
+                if ((dl as any).blob) {
+                  return <button key={ext} onClick={() => { const u = URL.createObjectURL((dl as any).blob); const a = document.createElement('a'); a.href = u; a.download = nameOf(dl); document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u); }} className="flex-1 text-center text-gray-500 hover:text-gray-700 underline bg-transparent border-0 cursor-pointer p-0" style={{ fontSize: '10px' }}>{ext}</button>;
+                }
+                return <a key={ext} href={`${backend?.backend_url ?? ''}/download?path=${encodeURIComponent((dl as any).path ?? '')}`} download={nameOf(dl)} className="flex-1 text-center text-gray-500 hover:text-gray-700 underline" style={{ fontSize: '10px' }}>{ext}</a>;
               })}
             </div>
           )}
@@ -973,7 +1026,7 @@ const LineageTools = React.memo<LineageToolsProps>(({
           
           {/* Edit History Log */}
           {editHistory && editHistory.length > 0 && (
-            <EditHistoryPanel editHistory={editHistory} onUndo={onUndo} backendUrl={backend?.backend_url} />
+            <EditHistoryPanel editHistory={editHistory} onUndo={onUndo} backendUrl={backend?.backend_url} undoPreview={backend?.type === 'local' ? backend.undoPreview : undefined} />
           )}
 
           {/* Lineage list - Always hierarchical */}

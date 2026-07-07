@@ -157,30 +157,53 @@ function Taxonium({
     };
   }, [editingLineage]);
 
+  // Backend-agnostic edit dispatch: local backend runs the edit in its web
+  // worker (in-memory); server backend POSTs to the Express endpoint. Both
+  // return the same result shape.
+  const callEdit = async (
+    action: 'merge-lineage' | 'edit-lineage-root' | 'undo-edit',
+    payload: Record<string, unknown>
+  ) => {
+    if (backend?.type === 'local') {
+      if (action === 'merge-lineage')
+        return backend.mergeLineage(payload.lineageName as string, payload.field as string);
+      if (action === 'edit-lineage-root')
+        return backend.editLineageRoot(
+          payload.lineageName as string,
+          payload.rootNodeId as string,
+          payload.field as string
+        );
+      if (action === 'undo-edit') return backend.undoEdit(payload.id as number | undefined);
+    }
+    if (backend?.type === 'server' && backend.backend_url) {
+      const response = await fetch(`${backend.backend_url}/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    }
+    throw new Error('No backend available for editing');
+  };
+
   // Function to handle merging a lineage with its parent
   const handleMergeLineage = async (lineageName: string) => {
     const field = colorBy.colorByField || 'meta_annotation_1';
 
-    if (backend?.type !== 'server' || !backend.backend_url) {
-      console.error('No backend server available for merge');
+    if (!backend) {
+      console.error('No backend available for merge');
       return;
     }
 
     try {
       console.log(`Merging ${lineageName} into its tree-parent`);
 
-      const response = await fetch(`${backend.backend_url}/merge-lineage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lineageName, field })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = await callEdit('merge-lineage', { lineageName, field });
+      if (result && result.error) throw new Error(result.error);
       console.log('Merge result:', result);
 
       setSelectedLineage(null);
@@ -219,9 +242,9 @@ function Taxonium({
       // Get the lineage field being used
       const field = colorBy.colorByField || 'meta_annotation_1';
 
-      // Check if we have a backend server to call
-      if (backend?.type !== 'server' || !backend.backend_url) {
-        console.error('Lineage editing requires a backend server connection');
+      // Editing works with either the local (in-browser) or server backend.
+      if (!backend) {
+        console.error('Lineage editing requires a backend connection');
         setEditingLineage(null);
         return;
       }
@@ -229,24 +252,12 @@ function Taxonium({
       try {
         console.log(`Setting node ${nodeIdStr} as new root for lineage ${editingLineage}`);
 
-        const response = await fetch(`${backend.backend_url}/edit-lineage-root`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            lineageName: editingLineage,
-            rootNodeId: nodeIdStr,
-            field
-          })
+        const result = await callEdit('edit-lineage-root', {
+          lineageName: editingLineage,
+          rootNodeId: nodeIdStr,
+          field,
         });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
+        if (result && result.error) throw new Error(result.error);
         console.log('Edit lineage result:', result);
 
         // Clear editing mode
@@ -317,6 +328,23 @@ function Taxonium({
       </div>
     );
   }
+
+  // Hand the original pipeline .pb bytes to the local backend for the pb export
+  // (the launcher attaches them to sourceData.pipelinePb after run-autolin).
+  useEffect(() => {
+    const pb = (sourceData as { pipelinePb?: ArrayBuffer } | null | undefined)?.pipelinePb;
+    if (backend?.type === 'local' && pb && typeof backend.setPipelinePb === 'function') {
+      backend.setPipelinePb(pb).catch(() => { /* non-critical */ });
+    }
+  }, [backend, sourceData]);
+
+  // Test-only hook: when the URL carries ?e2e=1, expose the backend so an
+  // automated test can drive the editing methods directly (no-op in normal use).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && /[?&]e2e=1/.test(window.location.search)) {
+      (window as unknown as { __lino_backend?: unknown }).__lino_backend = backend;
+    }
+  }, [backend]);
   let hoverDetails = useHoverDetails();
   const gisaidHoverDetails = useNodeDetails("gisaid-hovered", backend);
   if (window.location.toString().includes("epicov.org")) {
@@ -409,28 +437,40 @@ function Taxonium({
   }>>([]);
 
   const fetchEditHistory = useCallback(async () => {
-    if (backend?.type !== 'server' || !backend.backend_url) return;
+    if (!backend) return;
     try {
-      const response = await fetch(`${backend.backend_url}/edit-history`);
-      if (response.ok) {
-        setEditHistory(await response.json());
+      if (backend.type === 'local') {
+        setEditHistory(await backend.getEditHistory());
+        return;
+      }
+      if (backend.type === 'server' && backend.backend_url) {
+        const response = await fetch(`${backend.backend_url}/edit-history`);
+        if (response.ok) setEditHistory(await response.json());
       }
     } catch (e) { /* non-critical */ }
   }, [backend]);
 
   const handleUndo = useCallback(async (editId?: number) => {
-    if (backend?.type !== 'server' || !backend.backend_url) return;
+    if (!backend) return;
     try {
-      const response = await fetch(`${backend.backend_url}/undo-edit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editId }),
-      });
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || 'Undo failed');
+      let result;
+      if (backend.type === 'local') {
+        result = await backend.undoEdit(editId);
+        if (result && result.error) throw new Error(result.error as string);
+      } else if (backend.type === 'server' && backend.backend_url) {
+        const response = await fetch(`${backend.backend_url}/undo-edit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: editId }),
+        });
+        if (!response.ok) {
+          const err = await response.json();
+          throw new Error(err.error || 'Undo failed');
+        }
+        result = await response.json();
+      } else {
+        return;
       }
-      const result = await response.json();
       refreshLineageData();
       refreshTreeData();
       fetchEditHistory();
