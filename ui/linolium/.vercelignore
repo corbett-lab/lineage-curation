@@ -1,0 +1,9 @@
+# server backend is not used in the static build
+taxonium_backend
+# heavy dev-only / build caches
+**/node_modules
+**/.vite
+**/dist/**/*.map
+# docker + ci scaffolding
+Dockerfile*
+*.tar.gz
