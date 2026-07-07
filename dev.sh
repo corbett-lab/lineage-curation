@@ -131,6 +131,7 @@ docker run -it --rm --memory=8g \
   -v "$PWD/autolin":/app/autolin \
   -v "$PWD":/data \
   -e BACKEND_PORT="$BACKEND_PORT" \
+  -e HMR_CLIENT_PORT="$PORT" \
   "${ENV_ARGS[@]}" \
   -p "$PORT:3000" \
   linolium bash -c "$RUN_CMD"

@@ -10,6 +10,12 @@ import tailwindcss from '@tailwindcss/vite'
 const backendPort = process.env.BACKEND_PORT || '8001'
 const apiProxyTarget = `http://localhost:${backendPort}`
 
+// In the Docker dev container, vite listens on 3000 internally but the browser
+// reaches it via the host-published port ($PORT, passed as HMR_CLIENT_PORT). The
+// HMR client otherwise assumes the internal port, so its WebSocket connects to the
+// wrong port and HMR silently fails whenever PORT != 3000.
+const hmrClientPort = process.env.HMR_CLIENT_PORT ? Number(process.env.HMR_CLIENT_PORT) : undefined
+
 // Backend routes to forward. The SPA owns everything else (including '/').
 // Keep in sync with the express routes in taxonium_backend/server.js.
 const apiRoutes = [
@@ -56,6 +62,8 @@ export default defineConfig({
   server: {
     port: 5175,
     proxy: apiProxy,
+    // Point the HMR WebSocket at the host-published port so it works on any PORT.
+    hmr: hmrClientPort ? { clientPort: hmrClientPort } : true,
     fs: {
       allow: [
         // Allow serving files from the parent directory
