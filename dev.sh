@@ -28,6 +28,24 @@ usage() {
   echo "Usage: [PORT=3000] [BACKEND_PORT=8001] ./dev.sh [--server | --wasm]"
 }
 
+# Warn if something already holds the host port before Docker binds it. The usual
+# culprit is VS Code's port forwarding squatting on IPv4 127.0.0.1:$PORT; Docker
+# then only gets IPv6, so the app loads in Chrome (which uses IPv6 for localhost)
+# but hangs in Firefox (which uses IPv4). We can only flag it, not free it.
+warn_if_port_busy() {
+  command -v lsof >/dev/null 2>&1 || return 0
+  local listeners
+  listeners=$(lsof -nP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | tail -n +2)
+  [ -z "$listeners" ] && return 0
+  echo "⚠️  Port $PORT already has a listener before Docker starts:"
+  echo "$listeners" | sed 's/^/      /'
+  echo "    If that is a non-Docker process on IPv4 (e.g. VS Code port forwarding),"
+  echo "    the app will load in Chrome (IPv6 localhost) but hang in Firefox (IPv4)."
+  echo "    Fix: free it (VS Code Ports panel -> Stop Forwarding Port), pick another"
+  echo "    PORT, or open http://[::1]:$PORT in Firefox."
+  echo ""
+}
+
 PORT="${PORT:-3000}"
 BACKEND_PORT="${BACKEND_PORT:-8001}"
 
@@ -98,6 +116,8 @@ else
     echo ""
     wait'
 fi
+
+warn_if_port_busy
 
 docker run -it --rm --memory=8g \
   -v "$PWD/ui/linolium/src":/app/ui/src \
