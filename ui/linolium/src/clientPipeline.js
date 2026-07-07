@@ -14,9 +14,26 @@
 import AutolinWorker from '../worker/autolinWorker.js?worker';
 import ConvertWorker from '../worker/convertWorker.js?worker';
 
-function readAsArrayBuffer(fileOrBuf) {
-  if (fileOrBuf instanceof ArrayBuffer) return Promise.resolve(fileOrBuf);
-  return fileOrBuf.arrayBuffer();               // File / Blob
+// Decompress a gzipped buffer in the browser. Keyed on the gzip magic bytes
+// (0x1f 0x8b) rather than the filename, so a .pb.gz upload — or any gzipped
+// .pb — is transparently inflated before it reaches the Pyodide shim, which
+// only understands raw MAT protobuf. Falls back to the raw bytes if
+// DecompressionStream is unavailable (very old browsers).
+async function maybeGunzip(buf) {
+  const head = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
+  const isGzip = head.length === 2 && head[0] === 0x1f && head[1] === 0x8b;
+  if (!isGzip) return buf;
+  if (typeof DecompressionStream === 'undefined') return buf;
+  const ds = new DecompressionStream('gzip');
+  const stream = new Response(buf).body.pipeThrough(ds);
+  return await new Response(stream).arrayBuffer();
+}
+
+async function readAsArrayBuffer(fileOrBuf) {
+  const buf = (fileOrBuf instanceof ArrayBuffer)
+    ? fileOrBuf
+    : await fileOrBuf.arrayBuffer();            // File / Blob
+  return maybeGunzip(buf);                       // inflate .pb.gz transparently
 }
 
 // One-shot request/response over a worker with a streamed-log side channel.
