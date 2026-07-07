@@ -53,40 +53,38 @@ const useFullLineageData = (
   }, [backend]);
 
   useEffect(() => {
-    const fetchLineageData = async () => {
-      if (!backendUrl) {
-        setIsLoading(false);
-        return;
-      }
+    const applyData = (data: LineageResponse) => {
+      setLineageData(data.lineages);
+      setStats({
+        totalNodes: data.totalNodes,
+        nodesWithLineage: data.nodesWithLineage,
+        uniqueLineages: data.uniqueLineages,
+      });
+    };
 
+    const fetchLineageData = async () => {
       try {
         setIsLoading(true);
         setError(null);
 
-        console.log('=== FETCHING FULL LINEAGE DATA ===');
-        console.log('Backend URL:', backendUrl);
-        console.log('Field:', field);
+        // Local (backendless) path: the worker computes the lineage hierarchy
+        // in-memory from the same node array it already holds.
+        if (backend?.type === 'local' && typeof backend.getLineages === 'function') {
+          const data = (await backend.getLineages(field)) as LineageResponse;
+          applyData(data);
+          return;
+        }
+
+        if (!backendUrl) {
+          setIsLoading(false);
+          return;
+        }
 
         const url = `${backendUrl}/lineages?field=${encodeURIComponent(field)}`;
         const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data: LineageResponse = await response.json();
-
-        console.log(`Loaded ${data.lineages.length} unique lineages from ${data.totalNodes} total nodes`);
-        console.log('First 10 lineages:', data.lineages.slice(0, 10));
-
-        setLineageData(data.lineages);
-        setStats({
-          totalNodes: data.totalNodes,
-          nodesWithLineage: data.nodesWithLineage,
-          uniqueLineages: data.uniqueLineages
-        });
-
-        console.log('=================================');
+        applyData(data);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         console.error('Error fetching lineage data:', errorMessage);
@@ -98,7 +96,7 @@ const useFullLineageData = (
     };
 
     fetchLineageData();
-  }, [backendUrl, field, refreshTrigger]);
+  }, [backend, backendUrl, field, refreshTrigger]);
 
   // Function to manually refresh the data
   const refreshData = useCallback(() => {
