@@ -119,9 +119,12 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
     setParams(prev => ({ ...prev, [key]: value }));
   }, []);
 
-  // Run the pipeline
-  const runPipeline = useCallback(async () => {
-    if (!file) {
+  // Run the pipeline. Accepts an optional File/Blob (used by the sample-data
+  // button); when called as a click handler the event arg is ignored and the
+  // selected `file` state is used instead.
+  const runPipeline = useCallback(async (fileArg) => {
+    const theFile = (fileArg instanceof File || fileArg instanceof Blob) ? fileArg : file;
+    if (!theFile) {
       addLog('No file selected', 'error');
       return;
     }
@@ -134,11 +137,11 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       // Everything runs in the browser — no server upload, no /run-autolin.
       // AutoLin (Pyodide + pure-Python bte shim) then the JS matUtils/usher_to_taxonium
       // ports, orchestrated by runClientPipeline over two web workers.
-      addLog(`File: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
+      addLog(`File: ${theFile.name} (${(theFile.size / 1024 / 1024).toFixed(2)} MB)`, 'success');
       addLog(`Parameters: minsamples=${params.minsamples}, distinction=${params.distinction}, recursive=${params.recursive}`);
       setProgress(10);
 
-      const result = await runClientPipeline(file, params, {
+      const result = await runClientPipeline(theFile, params, {
         onLog: (message) => addLog(message),
         onStage: (s) => {
           if (s === 'loading') { setStage(STAGES.PROPOSING); setProgress(20); addLog('Loading Pyodide runtime…'); }
@@ -188,37 +191,49 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
     }
   }, [onLaunchTaxonium, sourceData]);
 
-  // Use sample data — a pre-computed Taxonium jsonl shipped as a static asset
-  // (public/mtb.4.8.autolin.r.jsonl.gz). Loaded via the viewer's own fetch
-  // (status:'url_supplied'), so no backend is involved.
+  // Use sample data — fetch the raw MTB lineage-4.8 protobuf (shipped gzipped as
+  // public/mtb.4.8.pb.gz), decompress it in the browser, and run the FULL AutoLin
+  // pipeline on it — exactly as if the user had uploaded mtb.4.8.pb. This exercises
+  // Pyodide + the bte shim + the JS converter end-to-end (reports 482 lineages
+  // proposed, matching golden mtb.4.8), rather than just loading a pre-computed
+  // tree into the viewer.
   const useSampleData = useCallback(async () => {
     setError(null);
     setLogs([]);
-    addLog('Loading sample tree (MTB lineage 4.8)…');
+    addLog('Fetching sample tree (MTB lineage 4.8)…');
 
     try {
       setStage(STAGES.LOADING);
-      setProgress(50);
-      // Absolute URL (origin + base) — the local backend runs in a Blob-URL worker
-      // context that cannot resolve a root-relative path. Filename carries 'jsonl'
-      // + 'gz' so the worker gunzips and parses it.
+      setProgress(5);
       const base = import.meta.env.BASE_URL || '/';
-      const url = new URL(`${base}mtb.4.8.autolin.r.jsonl.gz`, window.location.origin).href;
-      setSourceData({
-        status: 'url_supplied',
-        filename: url,
-        filetype: 'jsonl',
-      });
-      setProgress(100);
-      setStage(STAGES.COMPLETE);
-      setOutputFile('client');
-      addLog('Sample data ready!', 'success');
+      const url = new URL(`${base}mtb.4.8.pb.gz`, window.location.origin).href;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`Failed to fetch sample: HTTP ${resp.status}`);
+
+      // Decompress the .gz in the browser (same DecompressionStream used for pb export).
+      let pbBuffer;
+      if (typeof DecompressionStream !== 'undefined') {
+        const ds = new DecompressionStream('gzip');
+        const decompressed = resp.body.pipeThrough(ds);
+        pbBuffer = await new Response(decompressed).arrayBuffer();
+      } else {
+        // No DecompressionStream (very old browser) — fall back to the raw bytes,
+        // which only works if the asset is not actually gzipped.
+        pbBuffer = await resp.arrayBuffer();
+      }
+
+      const sampleFile = new File([pbBuffer], 'mtb.4.8.pb', { type: 'application/octet-stream' });
+      setFile(sampleFile);
+      addLog(`Sample loaded: mtb.4.8.pb (${(sampleFile.size / 1024 / 1024).toFixed(2)} MB) — running AutoLin…`, 'success');
+
+      // Run the identical client pipeline the upload path uses.
+      await runPipeline(sampleFile);
     } catch (err) {
       setStage(STAGES.ERROR);
       setError(err.message);
       addLog(`Error: ${err.message}`, 'error');
     }
-  }, [addLog]);
+  }, [addLog, runPipeline]);
 
   const isRunning = stage !== STAGES.IDLE && stage !== STAGES.COMPLETE && stage !== STAGES.ERROR;
   const canRun = file && !isRunning;
@@ -657,13 +672,10 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           onDragLeave={handleDragLeave}
           onClick={() => fileInputRef.current?.click()}
         >
-          {/* accept includes the trailing ".gz": many browsers match the file
-              picker against only the final extension, so ".pb.gz" alone leaves
-              .pb.gz files grayed out. handleFileChange re-validates the choice. */}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pb,.pb.gz,.gz,application/gzip"
+            accept=".pb,.pb.gz"
             onChange={handleFileChange}
             style={{ display: 'none' }}
             disabled={isRunning}
