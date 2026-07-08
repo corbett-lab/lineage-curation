@@ -52,16 +52,16 @@ RUN npm install && \
     cd ../taxonium_data_handling && npm install && \
     cd ../taxonium_backend && npm install
 
-# Copy source and build UI (rebuilds on any source change, but deps are cached)
+# Copy the autolin Python scripts, then the UI source, then build. The scripts must
+# be present before the build: npm run build's prebuild hook (sync-autolin-assets)
+# syncs propose_sublineages.py into the WASM assets from ../autolin. Only the scripts
+# are needed at runtime — the example data files alongside them are left out to keep
+# the image small.
+COPY src/autolin/*.py /app/autolin/
 COPY src/ui /app/ui
 RUN NODE_OPTIONS="--max-old-space-size=8192" npm run build
 
-# Copy the autolin Python scripts. Only the scripts are needed at runtime — the
-# pipeline reads/writes the uploaded file's directory, never the example data
-# files that live alongside the scripts in the repo, so those are left out of
-# the image to keep it small.
 WORKDIR /app
-COPY src/autolin/*.py /app/autolin/
 
 RUN mkdir -p /data
 
