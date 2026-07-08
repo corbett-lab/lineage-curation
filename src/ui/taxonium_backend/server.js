@@ -233,6 +233,12 @@ app.post("/run-autolin", async function (req, res) {
     sendEvent("log", { message: `Input: ${inputFile}` });
     sendEvent("log", { message: `Output: ${autolinPb}` });
 
+    // AutoLin's native per-lineage (dump) and per-sample (labels) tables. Passing
+    // -d/-l makes the server run propose_sublineages.py identically to the
+    // backendless (WASM) path, so both modes produce the same outputs.
+    const dumpTsv = path.join(outputDir, `${basename}.autolin.dump.tsv`);
+    const labelsTsv = path.join(outputDir, `${basename}.autolin.labels.tsv`);
+
     // Build command arguments for propose_sublineages.py
     const proposeArgs = [
       "propose_sublineages.py",
@@ -241,7 +247,9 @@ app.post("/run-autolin", async function (req, res) {
       "-m", String(params?.minsamples || 10),
       "-t", String(params?.distinction || 1),
       "-u", String(params?.cutoff || 0.95),
-      "-f", String(params?.floor || 0)
+      "-f", String(params?.floor || 0),
+      "-d", dumpTsv,
+      "-l", labelsTsv
     ];
 
     if (params?.recursive) proposeArgs.push("-r");
@@ -381,6 +389,8 @@ app.post("/run-autolin", async function (req, res) {
     if (fs.existsSync(jsonlOutput)) downloads.push({ name: `${basename}.autolin.jsonl.gz`, path: jsonlOutput });
     if (fs.existsSync(autolinPbGz)) downloads.push({ name: `${basename}.autolin.pb.gz`, path: autolinPbGz });
     if (fs.existsSync(tsvOutput)) downloads.push({ name: `${basename}.autolin.tsv`, path: tsvOutput });
+    if (fs.existsSync(dumpTsv)) downloads.push({ name: `${basename}.autolin.dump.tsv`, path: dumpTsv });
+    if (fs.existsSync(labelsTsv)) downloads.push({ name: `${basename}.autolin.labels.tsv`, path: labelsTsv });
 
     sendEvent("complete", {
       outputFile: jsonlOutput,
