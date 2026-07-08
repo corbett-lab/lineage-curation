@@ -62,6 +62,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
   const [outputFile, setOutputFile] = useState(null);
   const [sourceData, setSourceData] = useState(null); // in-memory Taxonium jsonl (backendless)
   const [downloads, setDownloads] = useState([]);
+  const [showMoreDownloads, setShowMoreDownloads] = useState(false);
 
   // Logs container ref for auto-scroll
   const logsRef = useRef(null);
@@ -1019,42 +1020,75 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           )}
         </div>
 
-        {/* Download Results */}
-        {downloads.length > 0 && stage === STAGES.COMPLETE && (
-          <>
-          <div className="section-title">Download Autolin results</div>
-          <div className="downloads-row">
-            {downloads.map((dl, i) => (
-              BACKENDLESS ? (
-                <button
-                  key={i}
-                  className="btn btn-secondary download-btn"
-                  title={dl.label}
-                  onClick={() => {
-                    // Client-side download from the in-memory Blob — no backend.
-                    const url = URL.createObjectURL(dl.blob);
-                    const a = document.createElement('a');
-                    a.href = url; a.download = dl.filename;
-                    document.body.appendChild(a); a.click();
-                    document.body.removeChild(a); URL.revokeObjectURL(url);
-                  }}
-                >
-                  {dl.filename.endsWith('.tsv') ? '.tsv' : dl.filename.endsWith('.pb') ? '.pb' : '.jsonl'}
-                </button>
-              ) : (
-                <a
-                  key={i}
-                  className="btn btn-secondary download-btn"
-                  href={`${BACKEND_URL}/download?path=${encodeURIComponent(dl.path)}`}
-                  download={dl.name}
-                >
-                  {dl.name.endsWith('.tsv') ? '.tsv' : dl.name.endsWith('.pb.gz') ? '.pb.gz' : '.jsonl.gz'}
-                </a>
-              )
-            ))}
-          </div>
-          </>
-        )}
+        {/* Download Results — the summary TSV (+ pb, jsonl) shows by default;
+            AutoLin's two extra tables (per-lineage dump, per-sample labels) sit
+            behind "More outputs". Identical in both modes. */}
+        {downloads.length > 0 && stage === STAGES.COMPLETE && (() => {
+          const nameOf = (dl) => (BACKENDLESS ? dl.filename : dl.name);
+          const extraText = (dl) => {
+            const f = nameOf(dl);
+            if (f.includes('.dump.')) return 'per-lineage info (.tsv)';
+            if (f.includes('.labels.')) return 'sample labels (.tsv)';
+            return null;   // not an extra table
+          };
+          const mainText = (dl) => {
+            const f = nameOf(dl);
+            if (f.includes('.pb')) return f.endsWith('.gz') ? '.pb.gz' : '.pb';
+            if (f.includes('jsonl')) return f.endsWith('.gz') ? '.jsonl.gz' : '.jsonl';
+            return '.tsv';   // the clade summary
+          };
+          const renderDl = (dl, i, text) => (
+            BACKENDLESS ? (
+              <button
+                key={i}
+                className="btn btn-secondary download-btn"
+                title={dl.label || nameOf(dl)}
+                onClick={() => {
+                  // Client-side download from the in-memory Blob — no backend.
+                  const url = URL.createObjectURL(dl.blob);
+                  const a = document.createElement('a');
+                  a.href = url; a.download = dl.filename;
+                  document.body.appendChild(a); a.click();
+                  document.body.removeChild(a); URL.revokeObjectURL(url);
+                }}
+              >
+                {text}
+              </button>
+            ) : (
+              <a
+                key={i}
+                className="btn btn-secondary download-btn"
+                title={dl.label || nameOf(dl)}
+                href={`${BACKEND_URL}/download?path=${encodeURIComponent(dl.path)}`}
+                download={dl.name}
+              >
+                {text}
+              </a>
+            )
+          );
+          const mainDl = downloads.filter((dl) => !extraText(dl));
+          const extraDl = downloads.filter((dl) => extraText(dl));
+          return (
+            <>
+              <div className="section-title">Download Autolin results</div>
+              <div className="downloads-row">
+                {mainDl.map((dl, i) => renderDl(dl, i, mainText(dl)))}
+              </div>
+              {extraDl.length > 0 && (
+                <>
+                  <div className="advanced-toggle" onClick={() => setShowMoreDownloads((v) => !v)}>
+                    <span>{showMoreDownloads ? '▼' : '▶'}</span> More outputs
+                  </div>
+                  {showMoreDownloads && (
+                    <div className="downloads-row">
+                      {extraDl.map((dl, i) => renderDl(dl, i, extraText(dl)))}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          );
+        })()}
 
         {/* Logs */}
         {logs.length > 0 && (
