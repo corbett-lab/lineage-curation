@@ -9,8 +9,8 @@ on:
 
 # The Vercel project must be created once and its IDs stored as repo secrets:
 #   VERCEL_TOKEN       - account token (Vercel > Settings > Tokens)
-#   VERCEL_ORG_ID      - from ui/linolium/.vercel/project.json after `vercel link`
-#   VERCEL_PROJECT_ID  - from ui/linolium/.vercel/project.json after `vercel link`
+#   VERCEL_ORG_ID      - from src/ui/.vercel/project.json after `vercel link`
+#   VERCEL_PROJECT_ID  - from src/ui/.vercel/project.json after `vercel link`
 env:
   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -30,7 +30,7 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
-      # Pulls the Vercel project settings (root directory = ui/linolium,
+      # Pulls the Vercel project settings (root directory = src/ui,
       # build command, output dir) so `vercel build` matches the dashboard.
       - name: Pull Vercel project settings
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}

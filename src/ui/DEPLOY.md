@@ -1,7 +1,7 @@
 # Deploying the browserized Linolium to Vercel
 
 The app is a fully static, backendless build (Route C + Pyodide AutoLin).
-`npm run build` in `ui/linolium/` emits a self-contained `dist/` that any static
+`npm run build` in `src/ui/` emits a self-contained `dist/` that any static
 host can serve. These files wire that build to Vercel with auto-publish on every
 push to `browserize-static`.
 
@@ -9,12 +9,12 @@ push to `browserize-static`.
 
 | File | Repo location it goes to | Purpose |
 |------|--------------------------|---------|
-| `vercel.json` | `ui/linolium/vercel.json` | Build command, output dir, SPA rewrite (keeps `autolin-assets/`, `assets/`, and all extensioned static files un-rewritten) |
-| `.vercelignore` | `ui/linolium/.vercelignore` | Trims the upload (drops the unused server backend, node_modules, sourcemaps, docker) |
+| `vercel.json` | `src/ui/vercel.json` | Build command, output dir, SPA rewrite (keeps `autolin-assets/`, `assets/`, and all extensioned static files un-rewritten) |
+| `.vercelignore` | `src/ui/.vercelignore` | Trims the upload (drops the unused server backend, node_modules, sourcemaps, docker) |
 | `workflows/deploy-vercel.yml` | `.github/workflows/deploy-vercel.yml` | GitHub Actions: production deploy on push to `browserize-static` |
 
 Key build facts Vercel needs:
-- **Root Directory:** `ui/linolium`
+- **Root Directory:** `src/ui`
 - **Build Command:** `npm run build` (runs build:component → build:data-handling → build:app)
 - **Output Directory:** `dist`
 - **Node version:** 20 or 22 (host default 12 is too old for Vite)
@@ -27,9 +27,9 @@ Key build facts Vercel needs:
 This is the "auto-publish built into GitHub" flow: Vercel installs a GitHub App,
 watches the repo, and redeploys on every push. No secrets, no Actions YAML.
 
-1. Commit `vercel.json` + `.vercelignore` into `ui/linolium/` on `browserize-static` (already staged locally — see below).
+1. Commit `vercel.json` + `.vercelignore` into `src/ui/` on `browserize-static` (already staged locally — see below).
 2. In the Vercel dashboard: **Add New → Project → Import** `corbett-lab/linolium`.
-3. Set **Root Directory = `ui/linolium`**. Vercel auto-detects Vite; confirm Build Command `npm run build`, Output `dist`.
+3. Set **Root Directory = `src/ui`**. Vercel auto-detects Vite; confirm Build Command `npm run build`, Output `dist`.
 4. **Project Settings → Environments → Production → Branch Tracking:** set the production branch to **`browserize-static`** (not `main`).
 5. Set **Node.js Version = 22** in Project Settings → General.
 6. Deploy. Every subsequent push to `browserize-static` → production deploy; other branches → preview URLs.
@@ -42,14 +42,14 @@ You do **not** need the workflow file for this path. Delete it if you go this ro
 
 Use this if you want the deploy defined in-repo rather than in Vercel's dashboard.
 
-1. Create the Vercel project once (locally): `cd ui/linolium && npx vercel link`
-   → this writes `ui/linolium/.vercel/project.json` with `orgId` + `projectId`.
+1. Create the Vercel project once (locally): `cd src/ui && npx vercel link`
+   → this writes `src/ui/.vercel/project.json` with `orgId` + `projectId`.
 2. Create a Vercel token: Vercel → Account Settings → Tokens.
 3. Add three **repository secrets** (GitHub → Settings → Secrets and variables → Actions):
    - `VERCEL_TOKEN` — the token from step 2
    - `VERCEL_ORG_ID` — `orgId` from `.vercel/project.json`
    - `VERCEL_PROJECT_ID` — `projectId` from `.vercel/project.json`
-4. Ensure the Vercel project's **Root Directory = `ui/linolium`** (Project Settings).
+4. Ensure the Vercel project's **Root Directory = `src/ui`** (Project Settings).
 5. Commit `.github/workflows/deploy-vercel.yml`. Push to `browserize-static` → the workflow builds and deploys to production.
 
 ---
