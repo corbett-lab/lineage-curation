@@ -126,6 +126,7 @@ docker run -it --rm --memory=8g \
   -v "$PWD/src/ui/public":/app/ui/public \
   -v "$PWD/src/ui/vite.config.js":/app/ui/vite.config.js \
   -v "$PWD/src/ui/taxonium_component/src":/app/ui/taxonium_component/src \
+  -v "$PWD/src/ui/shared":/app/ui/shared \
   -v "$PWD/src/ui/taxonium_backend":/app/ui/taxonium_backend \
   -v /app/ui/taxonium_backend/node_modules \
   -v "$PWD/src/autolin":/app/autolin \
