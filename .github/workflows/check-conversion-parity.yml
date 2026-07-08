@@ -1,0 +1,27 @@
+name: conversion ports match native
+
+# Server mode shells out to native matUtils / usher_to_taxonium; WASM mode runs the
+# hand-written JS ports in src/ui/ts/src/{matpb,matUtils,usherToTaxonium}.js. This
+# guards against the two implementations drifting: it runs the ports on a golden
+# tree and checks summaryClades is byte-exact to native matUtils output and that
+# toTaxonium's node records match a committed structural snapshot. Pure Node — the
+# ports have no npm deps, so no install step is needed.
+on:
+  pull_request:
+    paths:
+      - 'src/ui/ts/**'
+      - 'src/autolin/XFG.pangoonly.pb'
+      - '.github/workflows/check-conversion-parity.yml'
+  push:
+    branches: [main]
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: JS conversion ports vs native pipeline
+        run: node src/ui/ts/test/conversion-parity.mjs
