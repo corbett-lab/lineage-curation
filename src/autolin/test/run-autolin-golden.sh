@@ -1,14 +1,9 @@
 #!/usr/bin/env bash
-# AutoLin proposal golden test — runs the repo's propose_sublineages.py on a golden
-# tree and checks the proposed sublineages (the -d dump) byte-exact against a
-# committed golden. This guards the core scientific output against regressions in
-# the algorithm code.
+# Runs propose_sublineages.py on a golden tree and checks the proposed sublineages
+# (the -d dump) byte-exact against the committed golden. Needs the native env, so it
+# runs in the linolium image (see .github/workflows/check-autolin-golden.yml).
 #
-# Requires the native conda env (bte + usher), so it runs inside the linolium image
-# (see .github/workflows/check-autolin-golden.yml). Determinism was verified (two
-# runs identical); scores are integer ratios, so the golden is arch-independent.
-#
-# Regenerate after an intentional algorithm change (from the repo root, in the image):
+# Regenerate after an intentional algorithm change (repo root, in the image):
 #   docker run --rm -v "$PWD":/repo -w /repo ghcr.io/corbett-lab/linolium \
 #     bash -lc 'source /opt/conda/etc/profile.d/conda.sh && conda activate taxalin && \
 #       python src/autolin/propose_sublineages.py -i src/autolin/XFG.pangoonly.pb \

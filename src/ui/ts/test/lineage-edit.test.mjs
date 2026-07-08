@@ -1,9 +1,6 @@
-// Unit test for the shared lineage-edit engine (src/ui/shared/lineageEditCore.cjs)
-// — the single source of truth used by BOTH the Express backend and the in-browser
-// worker. Runs the engine directly on a synthetic tree (no server, no browser), so
-// a regression in merge / edit-root / the conflict-aware undo is caught in CI.
-//
-// Pure Node, no deps: `node src/ui/ts/test/lineage-edit.test.mjs` (or `npm test`).
+// Tests the shared lineage-edit engine (src/ui/shared/lineageEditCore.cjs) directly
+// on a synthetic tree: the lineage hierarchy, merge, edit-root, the conflict-aware
+// undo, and error handling. Pure Node.
 
 import core from "../../shared/lineageEditCore.cjs";
 

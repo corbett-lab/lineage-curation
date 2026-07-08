@@ -1,13 +1,9 @@
 name: autolin proposal golden
 
-# Runs the repo's propose_sublineages.py on a golden tree and checks the proposed
-# sublineages byte-exact against a committed golden — guarding the core scientific
-# output against algorithm regressions. Needs the native conda env (bte + usher),
-# so it runs the repo (mounted) inside the published linolium image.
-#
-# Note: it validates against whatever image is currently tagged `latest` (built from
-# main). A PR that changes ONLY the environment (env.yml) won't get a rebuilt image
-# until it merges; such changes are re-validated by the push-to-main run below.
+# Runs propose_sublineages.py on a golden tree and checks the proposed sublineages
+# byte-exact against the committed golden. Needs the native env, so it runs the repo
+# (mounted) in the published linolium image. That image is built from main, so an
+# env.yml change is only validated once it merges and the image rebuilds.
 on:
   pull_request:
     paths:

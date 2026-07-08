@@ -1,12 +1,8 @@
 name: JS tests
 
-# Runs the pure-Node JS test suite (`npm test` in src/ui):
-#   * conversion parity — the WASM build's JS ports (src/ui/ts/src/{matpb,matUtils,
-#     usherToTaxonium}.js) checked byte-exact against native matUtils/usher_to_taxonium
-#     output on a golden tree, so server and browser modes can't drift;
-#   * lineage-edit engine — merge / edit-root / conflict-aware undo against the shared
-#     src/ui/shared/lineageEditCore.cjs.
-# The ports and engine have no npm deps, so no install step is needed.
+# Runs the pure-Node JS suite (`npm test` in src/ui): the conversion-parity test (JS
+# ports in src/ui/ts/src checked byte-exact against native matUtils/usher_to_taxonium
+# on a golden tree) and the lineage-edit engine test. No npm deps, so no install step.
 on:
   pull_request:
     paths:
