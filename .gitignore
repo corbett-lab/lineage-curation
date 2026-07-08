@@ -1,6 +1,7 @@
 node_modules/
 src/ui/dist/
 src/ui/node_modules/
+site/
 __pycache__/
 *.pyc
 .DS_Store
