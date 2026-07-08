@@ -9,6 +9,8 @@ cd ..
 echo "=== build:data-handling ==="
 cd taxonium_data_handling && npm install --no-audit --no-fund 2>&1 | tail -3
 cd ..
+echo "=== sync WASM autolin assets from src/autolin ==="
+npm run sync-autolin-assets
 echo "=== build:app (vite build, backendless/static) ==="
 # VITE_BACKENDLESS=1 selects the static (in-browser Pyodide/WASM) build. The app's
 # config.js is dual-mode behind this flag; without it, `vite build` would produce

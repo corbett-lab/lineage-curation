@@ -1,0 +1,27 @@
+name: autolin assets in sync
+
+# The WASM build fetches src/ui/public/autolin-assets/propose_sublineages.py, which
+# is a copy of src/autolin/propose_sublineages.py (the server runs the src/autolin
+# original natively). This guards against the two silently drifting: it regenerates
+# the asset and fails if the committed copy is stale.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Regenerate WASM autolin assets from src/autolin
+        working-directory: src/ui
+        run: npm run sync-autolin-assets
+      - name: Fail if the committed assets are out of sync
+        run: |
+          if ! git diff --quiet -- src/ui/public/autolin-assets/; then
+            echo "::error::src/ui/public/autolin-assets/ is stale vs src/autolin/. Run 'npm run sync-autolin-assets' in src/ui and commit."
+            git --no-pager diff -- src/ui/public/autolin-assets/
+            exit 1
+          fi
+          echo "autolin assets in sync with src/autolin ✓"

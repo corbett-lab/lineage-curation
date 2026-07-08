@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "sync-autolin-assets": "cp ../autolin/propose_sublineages.py public/autolin-assets/propose_sublineages.py",
+    "predev": "npm run sync-autolin-assets",
+    "prebuild": "npm run sync-autolin-assets",
     "dev": "vite",
     "build": "npm run build:component && npm run build:data-handling && npm run build:app",
     "build:component": "cd taxonium_component && npm install && NODE_OPTIONS=\"--max-old-space-size=8192\" npm run build",
