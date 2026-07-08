@@ -120,15 +120,15 @@ fi
 warn_if_port_busy
 
 docker run -it --rm --memory=8g \
-  -v "$PWD/ui/linolium/src":/app/ui/src \
-  -v "$PWD/ui/linolium/worker":/app/ui/worker \
-  -v "$PWD/ui/linolium/ts":/app/ui/ts \
-  -v "$PWD/ui/linolium/public":/app/ui/public \
-  -v "$PWD/ui/linolium/vite.config.js":/app/ui/vite.config.js \
-  -v "$PWD/ui/linolium/taxonium_component/src":/app/ui/taxonium_component/src \
-  -v "$PWD/ui/linolium/taxonium_backend":/app/ui/taxonium_backend \
+  -v "$PWD/src/ui/src":/app/ui/src \
+  -v "$PWD/src/ui/worker":/app/ui/worker \
+  -v "$PWD/src/ui/ts":/app/ui/ts \
+  -v "$PWD/src/ui/public":/app/ui/public \
+  -v "$PWD/src/ui/vite.config.js":/app/ui/vite.config.js \
+  -v "$PWD/src/ui/taxonium_component/src":/app/ui/taxonium_component/src \
+  -v "$PWD/src/ui/taxonium_backend":/app/ui/taxonium_backend \
   -v /app/ui/taxonium_backend/node_modules \
-  -v "$PWD/autolin":/app/autolin \
+  -v "$PWD/src/autolin":/app/autolin \
   -v "$PWD":/data \
   -e BACKEND_PORT="$BACKEND_PORT" \
   -e HMR_CLIENT_PORT="$PORT" \

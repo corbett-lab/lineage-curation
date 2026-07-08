@@ -1,6 +1,6 @@
 
 set -e
-cd /repo/ui/linolium
+cd /repo/src/ui
 echo "=== npm install (root) ==="
 npm install --no-audit --no-fund 2>&1 | tail -3
 echo "=== build:component ==="

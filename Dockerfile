@@ -43,17 +43,17 @@ RUN conda env create -f env.yml && conda clean -afy
 
 # Install Node deps (only rebuilds when package*.json change)
 WORKDIR /app/ui
-COPY ui/linolium/package.json ui/linolium/package-lock.json ./
-COPY ui/linolium/taxonium_component/package.json ./taxonium_component/
-COPY ui/linolium/taxonium_data_handling/package.json ./taxonium_data_handling/
-COPY ui/linolium/taxonium_backend/package.json ./taxonium_backend/
+COPY src/ui/package.json src/ui/package-lock.json ./
+COPY src/ui/taxonium_component/package.json ./taxonium_component/
+COPY src/ui/taxonium_data_handling/package.json ./taxonium_data_handling/
+COPY src/ui/taxonium_backend/package.json ./taxonium_backend/
 RUN npm install && \
     cd taxonium_component && npm install && \
     cd ../taxonium_data_handling && npm install && \
     cd ../taxonium_backend && npm install
 
 # Copy source and build UI (rebuilds on any source change, but deps are cached)
-COPY ui/linolium /app/ui
+COPY src/ui /app/ui
 RUN NODE_OPTIONS="--max-old-space-size=8192" npm run build
 
 # Copy the autolin Python scripts. Only the scripts are needed at runtime — the
@@ -61,7 +61,7 @@ RUN NODE_OPTIONS="--max-old-space-size=8192" npm run build
 # files that live alongside the scripts in the repo, so those are left out of
 # the image to keep it small.
 WORKDIR /app
-COPY autolin/*.py /app/autolin/
+COPY src/autolin/*.py /app/autolin/
 
 RUN mkdir -p /data
 

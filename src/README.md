@@ -7,7 +7,7 @@ Web interface for phylogenetic lineage curation.
 **Prerequisites**: JSONL file (`.jsonl.gz`) - see [main README](../#quick-start) for MAT conversion.
 
 ```bash
-cd linolium
+cd src/ui
 npm run install-all && npm run build
 ./run-prod.sh /path/to/your/data.jsonl.gz
 ```
@@ -17,7 +17,7 @@ Open http://localhost:3000
 ## Manual Launch
 
 ```bash
-cd linolium
+cd src/ui
 # Backend
 cd taxonium_backend
 node server.js --port 8001 --data_file /path/to/data.jsonl.gz
@@ -30,7 +30,7 @@ npm run serve
 ## Development
 
 ```bash
-cd linolium
+cd src/ui
 npm run dev-with-backend    # Hot reload
 npm run rebuild-component   # Rebuild after changes
 npm run clean              # Clean artifacts

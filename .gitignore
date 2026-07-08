@@ -1,6 +1,6 @@
 node_modules/
-ui/linolium/dist/
-ui/linolium/node_modules/
+src/ui/dist/
+src/ui/node_modules/
 __pycache__/
 *.pyc
 .DS_Store
