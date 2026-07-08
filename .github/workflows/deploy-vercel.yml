@@ -30,6 +30,19 @@ jobs:
       - name: Install Vercel CLI
         run: npm install -g vercel@latest
 
+      # Keep the project's Root Directory pointed at src/ui (the app moved there in
+      # the repo reorg). Set via the API so the deploy works without a manual
+      # dashboard edit; idempotent — a no-op once it already matches.
+      - name: Set Vercel Root Directory to src/ui
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          curl -fsS -X PATCH \
+            "https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"rootDirectory": "src/ui"}' -o /dev/null
+
       # Pulls the Vercel project settings (root directory = src/ui,
       # build command, output dir) so `vercel build` matches the dashboard.
       - name: Pull Vercel project settings
