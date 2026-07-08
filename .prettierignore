@@ -1,0 +1,17 @@
+# Build output and vendored/generated assets
+dist
+build
+node_modules
+src/ui/public/autolin-assets
+*.min.js
+
+# Test goldens and data fixtures (must stay byte-exact)
+src/ui/ts/test/golden
+src/autolin/test/golden
+
+# Binary / data
+*.pb
+*.pb.gz
+*.jsonl
+*.jsonl.gz
+*.gz

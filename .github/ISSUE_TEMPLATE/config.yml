@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & usage help
+    url: https://github.com/corbett-lab/linolium/discussions
+    about: Ask questions and discuss usage here rather than opening an issue.

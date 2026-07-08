@@ -1,9 +1,13 @@
 {
   "name": "linolium",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "license": "GPL-3.0-or-later",
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node ts/test/conversion-parity.mjs && node ts/test/lineage-edit.test.mjs",
+    "format": "cd ../.. && npx prettier@3 --write .",
+    "format:check": "cd ../.. && npx prettier@3 --check .",
     "sync-autolin-assets": "cp ../autolin/propose_sublineages.py public/autolin-assets/propose_sublineages.py",
     "predev": "npm run sync-autolin-assets",
     "prebuild": "npm run sync-autolin-assets",

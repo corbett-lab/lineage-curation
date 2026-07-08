@@ -1,0 +1,33 @@
+name: autolin proposal golden
+
+# Runs the repo's propose_sublineages.py on a golden tree and checks the proposed
+# sublineages byte-exact against a committed golden — guarding the core scientific
+# output against algorithm regressions. Needs the native conda env (bte + usher),
+# so it runs the repo (mounted) inside the published linolium image.
+#
+# Note: it validates against whatever image is currently tagged `latest` (built from
+# main). A PR that changes ONLY the environment (env.yml) won't get a rebuilt image
+# until it merges; such changes are re-validated by the push-to-main run below.
+on:
+  pull_request:
+    paths:
+      - "src/autolin/**"
+      - ".github/workflows/check-autolin-golden.yml"
+  push:
+    branches: [main]
+
+jobs:
+  autolin-golden:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: AutoLin proposal matches golden
+        run: |
+          docker run --rm -v "$PWD":/repo -w /repo \
+            ghcr.io/${{ github.repository }}:latest \
+            bash src/autolin/test/run-autolin-golden.sh
