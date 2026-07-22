@@ -24,6 +24,42 @@ const STAGES = {
   ERROR: 'error'
 };
 
+// Browser-side AutoLin holds the tree in memory; refuse trees that would wedge the
+// tab and point at the Docker app instead.
+const MAX_REMOTE_BYTES = 100 * 1024 * 1024;
+
+const pbNameFromUrl = (u) => {
+  try {
+    return (new URL(u).pathname.split('/').pop() || 'tree.pb').replace(/\.gz$/i, '');
+  } catch {
+    return 'tree.pb';
+  }
+};
+
+// Fetch a (possibly gzipped) protobuf and hand back a File the pipeline accepts.
+// Hosts commonly serve .gz with `Content-Encoding: gzip`, so the browser has already
+// inflated it — key off the gzip magic bytes to avoid double-inflating.
+async function fetchPbAsFile(url, filename) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${url}`);
+
+  const declared = Number(resp.headers.get('content-length') || 0);
+  if (declared > MAX_REMOTE_BYTES) {
+    throw new Error(
+      `Tree is ${(declared / 1024 / 1024).toFixed(0)} MB — too large to run in the browser. ` +
+      `Run the Docker app locally for trees this size.`
+    );
+  }
+
+  let bytes = new Uint8Array(await resp.arrayBuffer());
+  if (bytes.length > 1 && bytes[0] === 0x1f && bytes[1] === 0x8b &&
+      typeof DecompressionStream !== 'undefined') {
+    const inflated = new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'));
+    bytes = new Uint8Array(await new Response(inflated).arrayBuffer());
+  }
+  return new File([bytes], filename, { type: 'application/octet-stream' });
+}
+
 const STAGE_LABELS = {
   [STAGES.IDLE]: 'Ready',
   [STAGES.UPLOADING]: 'Uploading file...',
@@ -348,22 +384,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       setProgress(5);
       const base = import.meta.env.BASE_URL || '/';
       const url = new URL(`${base}mtb.4.8.pb.gz`, window.location.origin).href;
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(`Failed to fetch sample: HTTP ${resp.status}`);
-
-      // Read the body, then gunzip ONLY if it's still compressed. Many hosts
-      // (vite dev, most static/CDN hosts) serve the .gz with `Content-Encoding:
-      // gzip`, so the browser has already inflated it and we get raw protobuf.
-      // Decompressing again would double-inflate and corrupt the data, so we key
-      // on the gzip magic bytes (0x1f 0x8b) and only inflate when they're present.
-      let bytes = new Uint8Array(await resp.arrayBuffer());
-      if (bytes.length > 1 && bytes[0] === 0x1f && bytes[1] === 0x8b &&
-          typeof DecompressionStream !== 'undefined') {
-        const inflated = new Response(bytes).body.pipeThrough(new DecompressionStream('gzip'));
-        bytes = new Uint8Array(await new Response(inflated).arrayBuffer());
-      }
-
-      const sampleFile = new File([bytes], 'mtb.4.8.pb', { type: 'application/octet-stream' });
+      const sampleFile = await fetchPbAsFile(url, 'mtb.4.8.pb');
       setFile(sampleFile);
       addLog(`Sample loaded: mtb.4.8.pb (${(sampleFile.size / 1024 / 1024).toFixed(2)} MB) — running AutoLin…`, 'success');
 
@@ -375,6 +396,38 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
       setError(err.message);
       addLog(`Error: ${err.message}`, 'error');
     }
+  }, [addLog, runPipeline]);
+
+  // Deep link: ?pb=<url> fetches a remote protobuf and runs AutoLin on it, so other
+  // sites (e.g. a Taxonium tree page) can hand a tree straight to Linolium.
+  const deepLinkStarted = useRef(false);
+  useEffect(() => {
+    if (deepLinkStarted.current) return;
+    const pbUrl = new URLSearchParams(window.location.search).get('pb');
+    if (!pbUrl) return;
+    if (!/^https?:\/\//i.test(pbUrl)) {
+      addLog('Ignoring ?pb= — only http(s) URLs are supported', 'error');
+      return;
+    }
+    deepLinkStarted.current = true;
+
+    (async () => {
+      setError(null);
+      setLogs([]);
+      addLog(`Fetching tree from ${pbUrl}`);
+      try {
+        setStage(STAGES.LOADING);
+        setProgress(5);
+        const remote = await fetchPbAsFile(pbUrl, pbNameFromUrl(pbUrl));
+        setFile(remote);
+        addLog(`Loaded ${remote.name} (${(remote.size / 1024 / 1024).toFixed(2)} MB) — running AutoLin…`, 'success');
+        await runPipeline(remote);
+      } catch (err) {
+        setStage(STAGES.ERROR);
+        setError(err.message);
+        addLog(`Error: ${err.message}`, 'error');
+      }
+    })();
   }, [addLog, runPipeline]);
 
   const isRunning = stage !== STAGES.IDLE && stage !== STAGES.COMPLETE && stage !== STAGES.ERROR;
