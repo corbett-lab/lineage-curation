@@ -398,8 +398,9 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
     }
   }, [addLog, runPipeline]);
 
-  // Deep link: ?pb=<url> fetches a remote protobuf and runs AutoLin on it, so other
-  // sites (e.g. a Taxonium tree page) can hand a tree straight to Linolium.
+  // Deep link: ?pb=<url> loads a remote protobuf so other sites (e.g. a Taxonium
+  // tree page) can hand a tree to Linolium. The user reviews parameters and clicks
+  // Run Pipeline — we don't auto-run.
   const deepLinkStarted = useRef(false);
   useEffect(() => {
     if (deepLinkStarted.current) return;
@@ -412,23 +413,17 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
     deepLinkStarted.current = true;
 
     (async () => {
-      setError(null);
-      setLogs([]);
       addLog(`Fetching tree from ${pbUrl}`);
       try {
-        setStage(STAGES.LOADING);
-        setProgress(5);
         const remote = await fetchPbAsFile(pbUrl, pbNameFromUrl(pbUrl));
         setFile(remote);
-        addLog(`Loaded ${remote.name} (${(remote.size / 1024 / 1024).toFixed(2)} MB) — running AutoLin…`, 'success');
-        await runPipeline(remote);
+        addLog(`Loaded ${remote.name} (${(remote.size / 1024 / 1024).toFixed(2)} MB) — click Run Pipeline to start.`, 'success');
       } catch (err) {
-        setStage(STAGES.ERROR);
         setError(err.message);
         addLog(`Error: ${err.message}`, 'error');
       }
     })();
-  }, [addLog, runPipeline]);
+  }, [addLog]);
 
   const isRunning = stage !== STAGES.IDLE && stage !== STAGES.COMPLETE && stage !== STAGES.ERROR;
   const canRun = file && !isRunning;
