@@ -38,17 +38,19 @@ const pbNameFromUrl = (u) => {
 
 // Fetch a (possibly gzipped) protobuf and hand back a File the pipeline accepts.
 // Hosts commonly serve .gz with `Content-Encoding: gzip`, so the browser has already
-// inflated it — key off the gzip magic bytes to avoid double-inflating.
-async function fetchPbAsFile(url, filename) {
+// inflated it — key off the gzip magic bytes to avoid double-inflating. Over the size
+// limit it throws a TOO_LARGE error (unless `force`) so the caller can offer an
+// override.
+async function fetchPbAsFile(url, filename, { force = false } = {}) {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`HTTP ${resp.status} fetching ${url}`);
 
   const declared = Number(resp.headers.get('content-length') || 0);
-  if (declared > MAX_REMOTE_BYTES) {
-    throw new Error(
-      `Tree is ${(declared / 1024 / 1024).toFixed(0)} MB — too large to run in the browser. ` +
-      `Run the Docker app locally for trees this size.`
-    );
+  if (!force && declared > MAX_REMOTE_BYTES) {
+    const err = new Error(`Tree is ${(declared / 1024 / 1024).toFixed(0)} MB`);
+    err.code = 'TOO_LARGE';
+    err.sizeMB = Math.round(declared / 1024 / 1024);
+    throw err;
   }
 
   let bytes = new Uint8Array(await resp.arrayBuffer());
@@ -95,6 +97,7 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState(null);
+  const [largeTree, setLargeTree] = useState(null); // { url, filename, sizeMB } — pending oversized fetch
   const [outputFile, setOutputFile] = useState(null);
   const [sourceData, setSourceData] = useState(null); // in-memory Taxonium jsonl (backendless)
   const [downloads, setDownloads] = useState([]);
@@ -419,11 +422,33 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
         setFile(remote);
         addLog(`Loaded ${remote.name} (${(remote.size / 1024 / 1024).toFixed(2)} MB) — click Run Pipeline to start.`, 'success');
       } catch (err) {
-        setError(err.message);
-        addLog(`Error: ${err.message}`, 'error');
+        if (err.code === 'TOO_LARGE') {
+          setLargeTree({ url: pbUrl, filename: pbNameFromUrl(pbUrl), sizeMB: err.sizeMB });
+          addLog(`Tree is ${err.sizeMB} MB — large trees may be slow or crash the tab.`, 'error');
+        } else {
+          setError(err.message);
+          addLog(`Error: ${err.message}`, 'error');
+        }
       }
     })();
   }, [addLog]);
+
+  // Override the size guard and load the oversized tree anyway (backendless only —
+  // the Docker path has no such limit).
+  const proceedLargeTree = useCallback(async () => {
+    if (!largeTree) return;
+    const { url, filename } = largeTree;
+    setLargeTree(null);
+    addLog(`Loading ${filename} anyway…`);
+    try {
+      const remote = await fetchPbAsFile(url, filename, { force: true });
+      setFile(remote);
+      addLog(`Loaded ${remote.name} (${(remote.size / 1024 / 1024).toFixed(2)} MB) — click Run Pipeline to start.`, 'success');
+    } catch (err) {
+      setError(err.message);
+      addLog(`Error: ${err.message}`, 'error');
+    }
+  }, [largeTree, addLog]);
 
   const isRunning = stage !== STAGES.IDLE && stage !== STAGES.COMPLETE && stage !== STAGES.ERROR;
   const canRun = file && !isRunning;
@@ -767,6 +792,27 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
           margin-bottom: 1rem;
         }
 
+        .warn-banner {
+          background: #fffbeb;
+          border: 1px solid #fde68a;
+          border-radius: 6px;
+          padding: 0.75rem 1rem;
+          color: #92400e;
+          font-size: 0.875rem;
+          margin-bottom: 1rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+        }
+        .warn-banner a { color: #92400e; text-decoration: underline; }
+        .warn-banner .btn-sm {
+          padding: 0.4rem 0.75rem;
+          font-size: 0.8125rem;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+
         .or-divider {
           display: flex;
           align-items: center;
@@ -1007,6 +1053,22 @@ function LauncherApp({ onLaunchTaxonium, onDownloadsReady }) {
                 </label>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Large-tree warning with an override */}
+        {largeTree && (
+          <div className="warn-banner">
+            <div>
+              <strong>{largeTree.filename}</strong> is {largeTree.sizeMB} MB. Running
+              AutoLin in the browser may be slow or crash the tab — the{' '}
+              <a href="https://github.com/corbett-lab/linolium#quick-start-local"
+                 target="_blank" rel="noopener noreferrer">Docker app</a>{' '}
+              handles large trees better.
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={proceedLargeTree}>
+              Proceed anyway
+            </button>
           </div>
         )}
 
